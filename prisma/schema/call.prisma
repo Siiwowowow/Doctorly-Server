@@ -1,0 +1,28 @@
+model Call {
+  id            String        @id @default(uuid(7))
+  callerId      String
+  caller        User          @relation("CallerUser", fields: [callerId], references: [id], onDelete: Restrict)
+  receiverId    String
+  receiver      User          @relation("ReceiverUser", fields: [receiverId], references: [id], onDelete: Restrict)
+  appointmentId String?
+  appointment   Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  type          CallType      @default(VIDEO)
+  status        CallStatus    @default(RINGING)
+  startedAt     DateTime      @default(now())
+  answeredAt    DateTime?
+  endedAt       DateTime?
+  duration      Int?          @default(0) // Duration in seconds
+  endReason     String?
+  isDeleted     Boolean       @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([callerId])
+  @@index([receiverId])
+  @@index([appointmentId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([isDeleted])
+  @@map("calls")
+}

@@ -1,0 +1,76 @@
+model Conversation {
+  id            String                    @id @default(uuid(7))
+  patientId     String
+  patient       Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId      String
+  doctor        Doctor                    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime?
+  isDeleted     Boolean                   @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  participants  ConversationParticipant[]
+  messages      Message[]
+
+  @@unique([patientId, doctorId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([lastMessageAt])
+  @@index([isDeleted])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid(7))
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  joinedAt       DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String              @id @default(uuid(7))
+  conversationId String
+  conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String              @db.Text
+  messageType    MessageType         @default(TEXT)
+  status         MessageStatus       @default(SENT)
+  isDeleted      Boolean             @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  attachments    MessageAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@index([status])
+  @@index([isDeleted])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id        String   @id @default(uuid(7))
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileUrl   String
+  fileType  String
+  fileSize  Int
+  publicId  String?
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+  @@map("message_attachments")
+}
