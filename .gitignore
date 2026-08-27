@@ -6,3 +6,7 @@ dist
 
 /src/generated
 
+# Audit files
+*audit*.md
+*AUDIT*.md
+generate_audit_dump.js
