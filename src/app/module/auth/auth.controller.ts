@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Request, Response } from "express";
 import status from "http-status";
 import { envVars } from "../../config/env";
@@ -15,11 +16,12 @@ const registerPatient = catchAsync(
         const payload = req.body;
         const result = await AuthService.registerPatient(payload);
 
-        const { accessToken, refreshToken, token, patient, user } = result;
+        const { accessToken, refreshToken, patient, user } = result;
+        const betterAuthToken = (result as any).session?.token || (result as any).token;
 
         tokenUtils.setAccessTokenCookie(res, accessToken);
         tokenUtils.setRefreshTokenCookie(res, refreshToken);
-        tokenUtils.setBetterAuthSessionCookie(res, token as string);
+        tokenUtils.setBetterAuthSessionCookie(res, betterAuthToken as string);
 
         sendResponse(res, {
             httpStatusCode: status.CREATED,
@@ -30,7 +32,7 @@ const registerPatient = catchAsync(
                 patient,
                 accessToken,
                 refreshToken,
-                token,
+                token: betterAuthToken,
             },
         });
     }
@@ -40,11 +42,11 @@ const loginUser = catchAsync(
     async (req: Request, res: Response) => {
         const payload = req.body;
         const result = await AuthService.loginUser(payload);
-        const { accessToken, refreshToken, token, user } = result;
+        const { accessToken, refreshToken, user, token: betterAuthToken } = result;
 
         tokenUtils.setAccessTokenCookie(res, accessToken);
         tokenUtils.setRefreshTokenCookie(res, refreshToken);
-        tokenUtils.setBetterAuthSessionCookie(res, token);
+        tokenUtils.setBetterAuthSessionCookie(res, betterAuthToken);
 
         sendResponse(res, {
             httpStatusCode: status.OK,
@@ -54,7 +56,7 @@ const loginUser = catchAsync(
                 user,
                 accessToken,
                 refreshToken,
-                token,
+                token: betterAuthToken,
             },
         });
     }

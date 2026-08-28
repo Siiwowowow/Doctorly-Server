@@ -2,8 +2,8 @@ import z from "zod";
 import { AppointmentStatus } from "../../../generated/prisma/enums";
 
 export const createAppointmentZodSchema = z.object({
-    doctorId: z.string().uuid("Doctor ID must be a valid UUID"),
-    scheduleId: z.string().uuid("Schedule ID must be a valid UUID"),
+    doctorId: z.string(),
+    scheduleId: z.string(),
 });
 
 export const updateAppointmentStatusZodSchema = z.object({
@@ -19,3 +19,4 @@ export const AppointmentValidation = {
     createAppointmentZodSchema,
     updateAppointmentStatusZodSchema,
 };
+
