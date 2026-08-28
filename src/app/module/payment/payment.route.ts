@@ -15,7 +15,21 @@ router.post(
     PaymentController.createCheckoutSession
 );
 
-// 2. Patient / Doctor / Admin get payments
+// 2. Verify payment session (Active sync for success page)
+router.get(
+    "/verify-session/:sessionId",
+    checkAuth(Role.PATIENT, Role.DOCTOR, Role.ADMIN, Role.SUPER_ADMIN),
+    PaymentController.verifyPaymentSession
+);
+
+// 3. Download/view official invoice
+router.get(
+    "/invoice/:paymentId",
+    checkAuth(Role.PATIENT, Role.DOCTOR, Role.ADMIN, Role.SUPER_ADMIN),
+    PaymentController.getPaymentInvoice
+);
+
+// 4. Patient / Doctor / Admin get payments
 router.get(
     "/my-payments",
     checkAuth(Role.PATIENT, Role.DOCTOR, Role.ADMIN, Role.SUPER_ADMIN),

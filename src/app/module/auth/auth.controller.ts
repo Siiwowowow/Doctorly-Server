@@ -146,16 +146,19 @@ const logoutUser = catchAsync(
             httpOnly: true,
             secure: isProduction,
             sameSite: isProduction ? "none" : "lax",
+            path: "/",
         });
         CookieUtils.clearCookie(res, "refreshToken", {
             httpOnly: true,
             secure: isProduction,
             sameSite: isProduction ? "none" : "lax",
+            path: "/",
         });
         CookieUtils.clearCookie(res, "better-auth.session_token", {
             httpOnly: true,
             secure: isProduction,
             sameSite: isProduction ? "none" : "lax",
+            path: "/",
         });
 
         sendResponse(res, {

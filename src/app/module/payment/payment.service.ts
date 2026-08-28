@@ -99,6 +99,8 @@ const createCheckoutSession = async (payload: ICreateCheckoutSessionPayload, use
         metadata: {
             appointmentId: appointment.id,
             paymentId: payment.id,
+            patientId: patient.id,
+            doctorId: appointment.doctorId,
         },
     });
 
@@ -387,9 +389,223 @@ const handlerStripeWebhookEvent = async (event: Stripe.Event) => {
     return { message: `Webhook event ${event.id} processed successfully` };
 };
 
+const verifyPaymentSession = async (sessionId: string, user: IRequestUser) => {
+    let session: Stripe.Checkout.Session;
+    try {
+        session = await stripe.checkout.sessions.retrieve(sessionId, {
+            expand: ["payment_intent"],
+        });
+    } catch (error: any) {
+        throw new AppError(status.BAD_REQUEST, `Invalid Stripe checkout session: ${error.message}`);
+    }
+
+    const appointmentId = session.metadata?.appointmentId;
+    const paymentId = session.metadata?.paymentId;
+
+    if (!appointmentId) {
+        throw new AppError(status.BAD_REQUEST, "Appointment metadata missing in checkout session");
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+            doctor: true,
+            patient: true,
+            schedule: true,
+            payment: true,
+        },
+    });
+
+    if (!appointment) {
+        throw new AppError(status.NOT_FOUND, "Appointment not found");
+    }
+
+    if (user.role === Role.PATIENT) {
+        const patient = await prisma.patient.findFirst({
+            where: { userId: user.userId, isDeleted: false },
+        });
+        if (!patient || appointment.patientId !== patient.id) {
+            throw new AppError(status.FORBIDDEN, "Unauthorized access to this appointment payment");
+        }
+    }
+
+    const isPaid = session.payment_status === "paid";
+
+    if (isPaid && appointment.paymentStatus !== PaymentStatus.PAID) {
+        await prisma.$transaction(async (tx) => {
+            await tx.appointment.update({
+                where: { id: appointmentId },
+                data: {
+                    paymentStatus: PaymentStatus.PAID,
+                },
+            });
+
+            if (paymentId) {
+                await tx.payment.update({
+                    where: { id: paymentId },
+                    data: {
+                        stripeEventId: session.id,
+                        status: PaymentStatus.PAID,
+                        paymentGatewayData: session as any,
+                    },
+                });
+            } else {
+                await tx.payment.upsert({
+                    where: { appointmentId },
+                    create: {
+                        appointmentId,
+                        amount: appointment.doctor.appointmentFee,
+                        transactionId: uuidv4(),
+                        stripeEventId: session.id,
+                        status: PaymentStatus.PAID,
+                        paymentGatewayData: session as any,
+                    },
+                    update: {
+                        stripeEventId: session.id,
+                        status: PaymentStatus.PAID,
+                        paymentGatewayData: session as any,
+                    },
+                });
+            }
+
+            await NotificationService.createNotification(
+                {
+                    recipientId: appointment.patient.userId,
+                    type: NotificationType.PAYMENT_SUCCESS,
+                    title: "Payment Successful",
+                    message: `Your payment of $${appointment.doctor.appointmentFee} for appointment with Dr. ${appointment.doctor.name} was confirmed.`,
+                    data: {
+                        appointmentId,
+                        amount: appointment.doctor.appointmentFee,
+                        sessionId: session.id,
+                    },
+                },
+                tx
+            );
+
+            await NotificationService.createNotification(
+                {
+                    recipientId: appointment.doctor.userId,
+                    type: NotificationType.PAYMENT_SUCCESS,
+                    title: "Appointment Payment Received",
+                    message: `Payment received for appointment with patient ${appointment.patient.name}.`,
+                    data: {
+                        appointmentId,
+                        amount: appointment.doctor.appointmentFee,
+                        sessionId: session.id,
+                    },
+                },
+                tx
+            );
+        });
+    }
+
+    const updatedAppointment = await prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+            doctor: true,
+            patient: true,
+            schedule: true,
+            payment: true,
+        },
+    });
+
+    return {
+        isPaid: updatedAppointment?.paymentStatus === PaymentStatus.PAID,
+        appointment: updatedAppointment,
+        payment: updatedAppointment?.payment,
+    };
+};
+
+const getPaymentInvoice = async (paymentIdOrAppointmentId: string, user: IRequestUser) => {
+    const payment = await prisma.payment.findFirst({
+        where: {
+            OR: [
+                { id: paymentIdOrAppointmentId },
+                { appointmentId: paymentIdOrAppointmentId },
+            ],
+        },
+        include: {
+            appointment: {
+                include: {
+                    doctor: true,
+                    patient: true,
+                    schedule: true,
+                },
+            },
+        },
+    });
+
+    if (!payment) {
+        throw new AppError(status.NOT_FOUND, "Payment record not found");
+    }
+
+    const appointment = payment.appointment;
+
+    if (user.role === Role.PATIENT) {
+        const patient = await prisma.patient.findFirst({
+            where: { userId: user.userId, isDeleted: false },
+        });
+        if (!patient || appointment.patientId !== patient.id) {
+            throw new AppError(status.FORBIDDEN, "Unauthorized access to this invoice");
+        }
+    } else if (user.role === Role.DOCTOR) {
+        const doctor = await prisma.doctor.findFirst({
+            where: { userId: user.userId, isDeleted: false },
+        });
+        if (!doctor || appointment.doctorId !== doctor.id) {
+            throw new AppError(status.FORBIDDEN, "Unauthorized access to this invoice");
+        }
+    }
+
+    if (payment.status !== PaymentStatus.PAID && appointment.paymentStatus !== PaymentStatus.PAID) {
+        throw new AppError(status.BAD_REQUEST, "Invoice is only available for paid appointments");
+    }
+
+    const invoiceNumber = `DOC-INV-${payment.id.slice(0, 8).toUpperCase()}`;
+    const invoiceDate = payment.updatedAt || payment.createdAt;
+    const formattedDate = new Date(invoiceDate).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+    });
+    const appointmentSchedule = appointment.schedule?.startDateTime
+        ? new Date(appointment.schedule.startDateTime).toLocaleString("en-US", {
+              dateStyle: "full",
+              timeStyle: "short",
+          })
+        : "N/A";
+
+    return {
+        invoiceNumber,
+        transactionId: payment.transactionId,
+        paymentId: payment.id,
+        appointmentId: appointment.id,
+        paymentStatus: payment.status,
+        amount: payment.amount,
+        currency: "USD",
+        paymentDate: formattedDate,
+        patient: {
+            id: appointment.patient.id,
+            name: appointment.patient.name,
+            email: appointment.patient.email,
+        },
+        doctor: {
+            id: appointment.doctor.id,
+            name: appointment.doctor.name,
+            designation: appointment.doctor.designation,
+            hospital: appointment.doctor.currentWorkingPlace || "Doctorly Telemedicine",
+        },
+        schedule: {
+            appointmentTime: appointmentSchedule,
+        },
+    };
+};
 
 export const PaymentService = {
     createCheckoutSession,
     getMyPayments,
     handlerStripeWebhookEvent,
+    verifyPaymentSession,
+    getPaymentInvoice,
 };

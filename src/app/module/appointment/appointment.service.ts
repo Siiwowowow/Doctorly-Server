@@ -262,6 +262,7 @@ const getMyAppointments = async (user: IRequestUser, query: IQueryParams) => {
             schedule: true,
             prescription: true,
             review: true,
+            payment: true,
         })
         .dynamicInclude(appointmentIncludeConfig)
         .sort()
@@ -559,6 +560,9 @@ const getAllAppointments = async (query: IQueryParams) => {
                 },
             },
             schedule: true,
+            prescription: true,
+            review: true,
+            payment: true,
         })
         .dynamicInclude(appointmentIncludeConfig)
         .sort()
