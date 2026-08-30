@@ -3,6 +3,7 @@ node_modules
 .env.*
 !.env.example
 dist
+api/index.js
 
 /src/generated
 
@@ -13,3 +14,5 @@ generate_audit_dump.js
 *.md
 !README.md
 *.cjs
+
+.vercel

@@ -23,9 +23,9 @@ interface EnvConfig {
         SMTP_PORT: string;
         SMTP_FROM: string;
     }
-    GOOGLE_CLIENT_ID: string;
-    GOOGLE_CLIENT_SECRET: string;
-    GOOGLE_CALLBACK_URL: string;
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
+    GOOGLE_CALLBACK_URL?: string;
     FRONTEND_URL: string;
     CLOUDINARY:{
         CLOUDINARY_CLOUD_NAME: string;
@@ -43,9 +43,8 @@ interface EnvConfig {
 
 const loadEnvVariables = (): EnvConfig => {
 
+    const missingEnvVariables: string[] = [];
     const requireEnvVariable = [
-        'NODE_ENV',
-        'PORT',
         'DATABASE_URL',
         'BETTER_AUTH_SECRET',
         'BETTER_AUTH_URL',
@@ -60,9 +59,6 @@ const loadEnvVariables = (): EnvConfig => {
         'EMAIL_SENDER_SMTP_HOST',
         'EMAIL_SENDER_SMTP_PORT',
         'EMAIL_SENDER_SMTP_FROM',
-        'GOOGLE_CLIENT_ID',
-        'GOOGLE_CLIENT_SECRET',
-        'GOOGLE_CALLBACK_URL',
         'FRONTEND_URL',
         'CLOUDINARY_CLOUD_NAME',
         'CLOUDINARY_API_KEY',
@@ -71,18 +67,23 @@ const loadEnvVariables = (): EnvConfig => {
         'STRIPE_WEBHOOK_SECRET',
         'SUPER_ADMIN_EMAIL',
         'SUPER_ADMIN_PASSWORD',
-    ]
+    ];
 
     requireEnvVariable.forEach((variable) => {
         if (!process.env[variable]) {
-            // throw new Error(`Environment variable ${variable} is required but not set in .env file.`);
-            throw new AppError(status.INTERNAL_SERVER_ERROR, `Environment variable ${variable} is required but not set in .env file.`);
+            missingEnvVariables.push(variable);
         }
-    })
+    });
+
+    if (missingEnvVariables.length > 0) {
+        const errorMsg = `Missing required environment variables: ${missingEnvVariables.join(', ')}. Please set them in your .env or Vercel Project Settings.`;
+        console.error(errorMsg);
+        throw new AppError(status.INTERNAL_SERVER_ERROR, errorMsg);
+    }
 
     return {
-        NODE_ENV: process.env.NODE_ENV as string,
-        PORT: process.env.PORT as string,
+        NODE_ENV: (process.env.NODE_ENV || 'production') as string,
+        PORT: (process.env.PORT || '5000') as string,
         DATABASE_URL: process.env.DATABASE_URL as string,
         BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET as string,
         BETTER_AUTH_URL: process.env.BETTER_AUTH_URL as string,
@@ -99,9 +100,9 @@ const loadEnvVariables = (): EnvConfig => {
             SMTP_PORT: process.env.EMAIL_SENDER_SMTP_PORT as string,
             SMTP_FROM: process.env.EMAIL_SENDER_SMTP_FROM as string,
         },
-        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID as string,
-        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET as string,
-        GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL as string,
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+        GOOGLE_CALLBACK_URL: process.env.GOOGLE_CALLBACK_URL,
         FRONTEND_URL: process.env.FRONTEND_URL as string,
         CLOUDINARY: {
             CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME as string,

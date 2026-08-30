@@ -1,0 +1,8 @@
+dist
+node_modules
+.git
+temp_frontend
+Tasks
+*.md
+*.cjs
+src/server.ts

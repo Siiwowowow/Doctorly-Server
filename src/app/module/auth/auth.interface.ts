@@ -7,6 +7,8 @@ export interface IRegisterPatientPayload {
     name: string;
     email: string;
     password: string;
+    contactNumber: string;
+    address?: string;
 }
 
 export interface IChangePasswordPayload {

@@ -8,6 +8,8 @@ import { logger } from "../utils/logger";
 import { prisma } from "./prisma";
 // If your Prisma file is located elsewhere, you can change the path
 
+const isProduction = envVars.NODE_ENV === "production";
+
 export const auth = betterAuth({
     baseURL: envVars.BETTER_AUTH_URL,
     secret: envVars.BETTER_AUTH_SECRET,
@@ -18,24 +20,6 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true,
         requireEmailVerification: true,
-    },
-
-    socialProviders:{
-        google:{
-            clientId: envVars.GOOGLE_CLIENT_ID,
-            clientSecret: envVars.GOOGLE_CLIENT_SECRET,
-            // callbackUrl: envVars.GOOGLE_CALLBACK_URL,
-            mapProfileToUser: ()=>{
-                return {
-                    role : Role.PATIENT,
-                    status : UserStatus.ACTIVE,
-                    needPasswordChange : false,
-                    emailVerified : true,
-                    isDeleted : false,
-                    deletedAt : null,
-                }
-            }
-        }
     },
 
     emailVerification:{
@@ -145,28 +129,23 @@ export const auth = betterAuth({
         }
     },
 
-    redirectURLs:{
-        signIn : `${envVars.BETTER_AUTH_URL}/api/v1/auth/google/success`,
-    },
-
-    trustedOrigins: [process.env.BETTER_AUTH_URL || "http://localhost:5000", envVars.FRONTEND_URL],
+    trustedOrigins: [process.env.BETTER_AUTH_URL || "http://localhost:5000", envVars.FRONTEND_URL, "http://localhost:3000", "http://localhost:5000"],
 
     advanced: {
-        // disableCSRFCheck: true,
-        useSecureCookies : false,
+        useSecureCookies : isProduction,
         cookies:{
             state:{
                 attributes:{
-                    sameSite: "none",
-                    secure: true,
+                    sameSite: isProduction ? "none" : "lax",
+                    secure: isProduction,
                     httpOnly: true,
                     path: "/",
                 }
             },
             sessionToken:{
                 attributes:{
-                    sameSite: "none",
-                    secure: true,
+                    sameSite: isProduction ? "none" : "lax",
+                    secure: isProduction,
                     httpOnly: true,
                     path: "/",
                 }

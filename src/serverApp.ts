@@ -52,11 +52,15 @@ cron.schedule("*/30 * * * *", async () => {
 
 app.use("/api/v1", IndexRoutes);
 
+app.get("/favicon.ico", (req: Request, res: Response) => {
+    res.status(204).end();
+});
+
 // Basic route
-app.get('/', async (req: Request, res: Response) => {
-    res.status(201).json({
+app.get(['/', '/api'], async (req: Request, res: Response) => {
+    res.status(200).json({
         success: true,
-        message: 'API is working',
+        message: 'Doctorly Healthcare API is live and working',
     })
 });
 

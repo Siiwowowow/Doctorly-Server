@@ -1,5 +1,6 @@
+import express from "express";
 import http from "http";
-import app from "./app";
+import app from "./serverApp";
 import { envVars } from "./app/config/env";
 import { initSocketIO } from "./app/socket";
 import { logger } from "./app/utils/logger";
