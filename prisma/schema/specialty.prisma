@@ -8,9 +8,10 @@ model Specialty {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  isDeleted         Boolean           @default(false)
-  deletedAt         DateTime?
-  doctorSpecialties DoctorSpecialty[]
+  isDeleted          Boolean             @default(false)
+  deletedAt          DateTime?
+  doctorSpecialties  DoctorSpecialty[]
+  doctorApplications DoctorApplication[]
 
   @@index([isDeleted], name: "idx_specialty_isDeleted")
   @@index([title], name: "idx_specialty_title")

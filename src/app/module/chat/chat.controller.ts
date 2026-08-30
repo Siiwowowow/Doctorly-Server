@@ -110,12 +110,40 @@ const getUnreadChatCount = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+const shareMedicalRecord = catchAsync(async (req: Request, res: Response) => {
+    const user = req.user;
+    const conversationId = String(req.params.conversationId);
+    const result = await ChatService.shareMedicalRecord(conversationId, user, req.body);
+
+    sendResponse(res, {
+        httpStatusCode: status.CREATED,
+        success: true,
+        message: "Medical record shared in chat successfully",
+        data: result,
+    });
+});
+
+const getConversationSharedDocuments = catchAsync(async (req: Request, res: Response) => {
+    const user = req.user;
+    const conversationId = String(req.params.conversationId);
+    const result = await ChatService.getConversationSharedDocuments(conversationId, user);
+
+    sendResponse(res, {
+        httpStatusCode: status.OK,
+        success: true,
+        message: "Shared documents retrieved successfully",
+        data: result,
+    });
+});
+
 export const ChatController = {
     getOrCreateConversation,
     getMyConversations,
     getConversationById,
     getConversationMessages,
     sendMessage,
+    shareMedicalRecord,
+    getConversationSharedDocuments,
     markConversationAsRead,
     deleteMessage,
     getUnreadChatCount,

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import status from "http-status";
 import { Prisma } from "../../../generated/prisma/client";
 import {
@@ -24,6 +25,7 @@ import {
     ICreateConversationPayload,
     IMessageAttachmentInput,
     ISendMessagePayload,
+    IShareMedicalRecordPayload,
 } from "./chat.interface";
 
 // Rate limiting map for chat messages: userId -> timestamps[]
@@ -425,6 +427,24 @@ const sendMessage = async (
         attachmentsToCreate.push(...payload.attachments);
     }
 
+    let medicalRecordId: string | null = null;
+    if (payload.medicalRecordId) {
+        const medicalRecord = await prisma.medicalRecord.findFirst({
+            where: {
+                id: payload.medicalRecordId,
+                patientId: conversation.patientId,
+                isDeleted: false,
+            },
+        });
+
+        if (!medicalRecord) {
+            throw new AppError(status.NOT_FOUND, "Medical record not found or does not belong to this patient");
+        }
+
+        medicalRecordId = medicalRecord.id;
+        payload.messageType = MessageType.MEDICAL_RECORD;
+    }
+
     const messageType = payload.messageType || MessageType.TEXT;
 
     // 5. Execute creation within atomic transaction
@@ -433,8 +453,9 @@ const sendMessage = async (
             data: {
                 conversationId,
                 senderId: user.userId,
-                content: payload.content,
+                content: payload.content || "",
                 messageType,
+                medicalRecordId,
                 status: MessageStatus.SENT,
                 attachments: {
                     create: attachmentsToCreate.map((att) => ({
@@ -465,6 +486,8 @@ const sendMessage = async (
                 title: `New message from ${senderName}`,
                 message: messageType === MessageType.TEXT
                     ? (payload.content.length > 80 ? `${payload.content.substring(0, 80)}...` : payload.content)
+                    : messageType === MessageType.MEDICAL_RECORD
+                    ? `Shared a medical record`
                     : `Sent you an attachment (${messageType.toLowerCase()})`,
                 data: {
                     conversationId,
@@ -479,32 +502,129 @@ const sendMessage = async (
     });
 
     // 6. Broadcast Real-Time Events via Socket.IO
-    try {
-        const io = getSocketIO();
-        const convRoom = getConversationRoom(conversationId);
+    if (!payload.skipSocketEmit) {
+        try {
+            const io = getSocketIO();
+            const convRoom = getConversationRoom(conversationId);
 
-        // Emit to conversation room (for users currently viewing the chat)
-        io.to(convRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, {
-            senderId: user.userId,
-            content: message.content,
-            conversationId,
-            tempId: payload.tempId,
-            timestamp: message.createdAt.toISOString(),
-        });
+            const socketPayload = {
+                ...message,
+                tempId: payload.tempId,
+            };
 
-        // Also emit directly to recipient's private user room
-        emitToUser(otherParticipant.userId, SOCKET_EVENTS.CHAT_MESSAGE, {
-            senderId: user.userId,
-            content: message.content,
-            conversationId,
-            tempId: payload.tempId,
-            timestamp: message.createdAt.toISOString(),
-        });
-    } catch {
-        // Socket.IO emission failures should not break the HTTP response
+            // Emit to conversation room (for users currently viewing the chat)
+            io.to(convRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, socketPayload as any);
+
+            // Also emit directly to recipient's private user room
+            emitToUser(otherParticipant.userId, SOCKET_EVENTS.CHAT_MESSAGE, socketPayload as any);
+        } catch {
+            // Socket.IO emission failures should not break the HTTP response
+        }
     }
 
     return message;
+};
+
+const shareMedicalRecord = async (
+    conversationId: string,
+    user: IRequestUser,
+    payload: IShareMedicalRecordPayload
+) => {
+    return await sendMessage(conversationId, user, {
+        content: payload.note || "Shared a medical record",
+        messageType: MessageType.MEDICAL_RECORD,
+        medicalRecordId: payload.medicalRecordId,
+    });
+};
+
+const getConversationSharedDocuments = async (conversationId: string, user: IRequestUser) => {
+    // 1. Verify participant access
+    const conversation = await prisma.conversation.findFirst({
+        where: {
+            id: conversationId,
+            isDeleted: false,
+            participants: {
+                some: {
+                    userId: user.userId,
+                },
+            },
+        },
+        include: {
+            doctor: { include: { user: true } },
+            patient: { include: { user: true } },
+        },
+    });
+
+    if (!conversation) {
+        throw new AppError(status.NOT_FOUND, "Conversation not found or access denied");
+    }
+
+    // 2. Query all messages in conversation with attachments or linked medical records
+    const messages = await prisma.message.findMany({
+        where: {
+            conversationId,
+            isDeleted: false,
+            OR: [
+                { attachments: { some: {} } },
+                { medicalRecordId: { not: null } },
+            ],
+        },
+        orderBy: { createdAt: "desc" },
+        include: defaultMessageInclude,
+    });
+
+    const patientUserId = conversation.patient.userId;
+
+    const patientDocuments: any[] = [];
+    const doctorDocuments: any[] = [];
+
+    messages.forEach((msg) => {
+        const isFromPatient = msg.senderId === patientUserId;
+        const targetList = isFromPatient ? patientDocuments : doctorDocuments;
+
+        if (msg.attachments && msg.attachments.length > 0) {
+            msg.attachments.forEach((att) => {
+                targetList.push({
+                    id: att.id,
+                    type: "FILE",
+                    fileName: att.fileName,
+                    fileUrl: att.fileUrl,
+                    fileType: att.fileType,
+                    fileSize: att.fileSize,
+                    createdAt: msg.createdAt,
+                    senderName: isFromPatient ? conversation.patient.name : `Dr. ${conversation.doctor.name}`,
+                    senderRole: isFromPatient ? Role.PATIENT : Role.DOCTOR,
+                    messageId: msg.id,
+                });
+            });
+        }
+
+        if (msg.medicalRecord) {
+            targetList.push({
+                id: msg.medicalRecord.id,
+                type: "MEDICAL_RECORD",
+                diagnosis: msg.medicalRecord.diagnosis,
+                symptoms: msg.medicalRecord.symptoms,
+                clinicalNotes: msg.medicalRecord.clinicalNotes,
+                treatment: msg.medicalRecord.treatment,
+                advice: msg.medicalRecord.advice,
+                createdAt: msg.medicalRecord.createdAt,
+                sharedAt: msg.createdAt,
+                senderName: isFromPatient ? conversation.patient.name : `Dr. ${conversation.doctor.name}`,
+                senderRole: isFromPatient ? Role.PATIENT : Role.DOCTOR,
+                messageId: msg.id,
+            });
+        }
+    });
+
+    return {
+        conversationId,
+        patient: conversation.patient,
+        doctor: conversation.doctor,
+        patientDocuments,
+        doctorDocuments,
+        totalCount: patientDocuments.length + doctorDocuments.length,
+    };
 };
 
 const markConversationAsRead = async (conversationId: string, user: IRequestUser) => {
@@ -645,6 +765,8 @@ export const ChatService = {
     getConversationById,
     getConversationMessages,
     sendMessage,
+    shareMedicalRecord,
+    getConversationSharedDocuments,
     markConversationAsRead,
     deleteMessage,
     getUnreadChatCount,

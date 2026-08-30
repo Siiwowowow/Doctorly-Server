@@ -1,7 +1,7 @@
 import z from "zod";
 
 export const createMedicalRecordZodSchema = z.object({
-    appointmentId: z.string().uuid("Appointment ID must be a valid UUID"),
+    appointmentId: z.string().min(1, "Appointment ID is required"),
     diagnosis: z.string().min(1, "Diagnosis is required").max(1000, "Diagnosis must be at most 1000 characters"),
     symptoms: z.string().min(1, "Symptoms are required").max(1000, "Symptoms must be at most 1000 characters"),
     clinicalNotes: z.string().max(5000, "Clinical notes must be at most 5000 characters").optional(),

@@ -17,7 +17,14 @@ export interface ISendMessagePayload {
     content: string;
     messageType?: MessageType;
     tempId?: string;
+    medicalRecordId?: string;
     attachments?: IMessageAttachmentInput[];
+    skipSocketEmit?: boolean;
+}
+
+export interface IShareMedicalRecordPayload {
+    medicalRecordId: string;
+    note?: string;
 }
 
 export interface IChatPaginationQuery {

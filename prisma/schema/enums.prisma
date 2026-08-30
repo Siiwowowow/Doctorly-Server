@@ -66,6 +66,8 @@ enum MessageType {
   TEXT
   IMAGE
   DOCUMENT
+  MEDICAL_RECORD
+  CALL
   SYSTEM
 }
 
@@ -89,4 +91,19 @@ enum CallStatus {
   ENDED
   FAILED
   CANCELED
+}
+
+enum DoctorApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  RESUBMISSION_REQUIRED
+}
+
+enum DocumentVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
 }

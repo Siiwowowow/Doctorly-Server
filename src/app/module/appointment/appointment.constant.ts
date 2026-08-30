@@ -1,6 +1,7 @@
 import { Prisma } from "../../../generated/prisma/client";
 
 export const appointmentSearchableFields = [
+    "id",
     "doctor.name",
     "doctor.email",
     "patient.name",

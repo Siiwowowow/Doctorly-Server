@@ -32,7 +32,10 @@ const getAllAdmins = async () => {
 const getAdminById = async (id: string) => {
     const admin = await prisma.admin.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
         include: {
@@ -62,7 +65,10 @@ const getAdminById = async (id: string) => {
 const updateAdmin = async (id: string, payload: IUpdateAdminPayload) => {
     const isAdminExist = await prisma.admin.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
     });
@@ -75,7 +81,7 @@ const updateAdmin = async (id: string, payload: IUpdateAdminPayload) => {
 
     const updatedAdmin = await prisma.admin.update({
         where: {
-            id,
+            id: isAdminExist.id,
         },
         data: {
             ...admin,
@@ -100,7 +106,10 @@ const updateAdmin = async (id: string, payload: IUpdateAdminPayload) => {
 const deleteAdmin = async (id: string, user: IRequestUser) => {
     const isAdminExist = await prisma.admin.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
     });
@@ -136,7 +145,7 @@ const deleteAdmin = async (id: string, user: IRequestUser) => {
 
     const result = await prisma.$transaction(async (tx) => {
         await tx.admin.update({
-            where: { id },
+            where: { id: isAdminExist.id },
             data: {
                 isDeleted: true,
                 deletedAt: new Date(),

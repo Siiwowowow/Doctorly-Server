@@ -145,7 +145,7 @@ export const registerSocketHandlers = (
     });
 
     // 5. Chat Messaging & Signaling Handlers
-    socket.on(SOCKET_EVENTS.CHAT_SEND, (payload: IChatMessagePayload, callback) => {
+    socket.on(SOCKET_EVENTS.CHAT_SEND, async (payload: IChatMessagePayload, callback) => {
         try {
             const parseResult = chatMessageSchema.safeParse(payload);
             if (!parseResult.success) {
@@ -158,24 +158,53 @@ export const registerSocketHandlers = (
 
             const validPayload = parseResult.data;
 
+            // 1. Instantly broadcast to recipient for real-time <50ms delivery
+            const optimisticId = validPayload.tempId || "temp-" + Date.now();
             const messageData = {
+                id: optimisticId,
                 senderId: user.userId,
                 content: validPayload.content,
                 conversationId: validPayload.conversationId,
                 tempId: validPayload.tempId,
-                timestamp: new Date().toISOString(),
+                messageType: "TEXT",
+                status: "SENT",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
             };
 
             if (validPayload.conversationId) {
                 const convRoom = getConversationRoom(validPayload.conversationId);
-                io.to(convRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageData);
+                socket.to(convRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageData);
             }
 
             const recipientRoom = getUserRoom(validPayload.recipientId);
-            io.to(recipientRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageData);
+            socket.to(recipientRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageData);
 
-            if (callback && typeof callback === "function") {
-                callback({ success: true });
+            // 2. Persist in background (with skipSocketEmit to prevent double-emit)
+            if (validPayload.conversationId) {
+                try {
+                    const persistedMessage = await ChatService.sendMessage(validPayload.conversationId, user, {
+                        content: validPayload.content,
+                        tempId: validPayload.tempId,
+                        messageType: "TEXT",
+                        skipSocketEmit: true, // We already emitted above!
+                    });
+
+                    // 3. ACK with the fully persisted message so sender can reconcile
+                    if (callback && typeof callback === "function") {
+                        callback({ success: true, data: { ...persistedMessage, tempId: validPayload.tempId } });
+                    }
+                } catch (persistError: unknown) {
+                    const msg = persistError instanceof Error ? persistError.message : "Failed to persist";
+                    logger.error(`[Socket] Persistence error in chat:send: ${msg}`);
+                    if (callback && typeof callback === "function") {
+                        callback({ success: false, error: msg });
+                    }
+                }
+            } else {
+                if (callback && typeof callback === "function") {
+                    callback({ success: false, error: "Conversation ID missing" });
+                }
             }
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";

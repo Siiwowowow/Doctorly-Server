@@ -10,8 +10,8 @@ export const prescriptionMedicineZodSchema = z.object({
 });
 
 export const createPrescriptionZodSchema = z.object({
-    appointmentId: z.string().uuid("Appointment ID must be a valid UUID"),
-    medicalRecordId: z.string().uuid("Medical Record ID must be a valid UUID").optional(),
+    appointmentId: z.string().min(1, "Appointment ID is required"),
+    medicalRecordId: z.string().min(1, "Medical Record ID is required").optional(),
     instructions: z.string().max(5000, "Instructions must be at most 5000 characters").optional(),
     notes: z.string().max(5000, "Notes must be at most 5000 characters").optional(),
     advice: z.string().max(2000, "Advice must be at most 2000 characters").optional(),

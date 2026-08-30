@@ -23,6 +23,13 @@ const defaultPrescriptionInclude = {
             profilePhoto: true,
             contactNumber: true,
             address: true,
+            patientHealthData: {
+                select: {
+                    bloodGroup: true,
+                    gender: true,
+                    dateOfBirth: true,
+                },
+            },
         },
     },
     doctor: {
@@ -103,9 +110,9 @@ const createPrescription = async (payload: ICreatePrescriptionPayload, user: IRe
         throw new AppError(status.NOT_FOUND, "Appointment not found");
     }
 
-    // 3. Verify appointment status is COMPLETED
-    if (appointment.status !== AppointmentStatus.COMPLETED) {
-        throw new AppError(status.BAD_REQUEST, "Prescription can only be created for completed appointments");
+    // 3. Verify appointment is not canceled
+    if (appointment.status === AppointmentStatus.CANCELED) {
+        throw new AppError(status.BAD_REQUEST, "Prescription cannot be created for canceled appointments");
     }
 
     // 4. Verify appointment doctor matches authenticated doctor
@@ -118,8 +125,8 @@ const createPrescription = async (payload: ICreatePrescriptionPayload, user: IRe
         throw new AppError(status.BAD_REQUEST, "Patient account associated with this appointment is deleted or inactive");
     }
 
-    // 6. Resolve and verify MedicalRecord for this appointment
-    let medicalRecordId = payload.medicalRecordId;
+    // 6. Resolve and verify MedicalRecord for this appointment (optional)
+    let medicalRecordId = payload.medicalRecordId || null;
 
     if (medicalRecordId) {
         const medicalRecord = await prisma.medicalRecord.findFirst({
@@ -140,14 +147,11 @@ const createPrescription = async (payload: ICreatePrescriptionPayload, user: IRe
             },
         });
 
-        if (!medicalRecord || medicalRecord.isDeleted) {
-            throw new AppError(
-                status.BAD_REQUEST,
-                "A valid medical record must exist for this completed appointment before creating a prescription"
-            );
+        if (medicalRecord && !medicalRecord.isDeleted) {
+            medicalRecordId = medicalRecord.id;
+        } else {
+            medicalRecordId = null;
         }
-
-        medicalRecordId = medicalRecord.id;
     }
 
     // 7. Prevent duplicate prescription for this appointment

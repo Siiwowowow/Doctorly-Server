@@ -17,7 +17,7 @@ export const createDoctorZodSchema = z.object({
         designation: z.string({ message: "Designation is required" }).min(2, "Designation must be at least 2 characters").max(100, "Designation must be at most 100 characters"),
         profilePhoto: z.string().url("Profile photo must be a valid URL").optional(),
     }),
-    specialties: z.array(z.string().uuid("Specialty ID must be a valid UUID"), { message: "Specialties must be an array of specialty IDs" }).min(1, "At least one specialty is required"),
+    specialties: z.array(z.string().min(1, "Specialty ID is required"), { message: "Specialties must be an array of specialty IDs" }).min(1, "At least one specialty is required"),
 });
 
 export const createAdminZodSchema = z.object({

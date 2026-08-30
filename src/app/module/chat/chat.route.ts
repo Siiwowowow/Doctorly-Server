@@ -53,14 +53,29 @@ router.post(
     ChatController.sendMessage
 );
 
-// 7. Mark conversation as read
+// 7. Share a medical record in chat
+router.post(
+    "/conversations/:conversationId/share-medical-record",
+    checkAuth(Role.PATIENT, Role.DOCTOR),
+    validateRequest(ChatValidation.shareMedicalRecordZodSchema),
+    ChatController.shareMedicalRecord
+);
+
+// 8. Get shared clinical documents & medical records in conversation
+router.get(
+    "/conversations/:conversationId/documents",
+    checkAuth(Role.PATIENT, Role.DOCTOR),
+    ChatController.getConversationSharedDocuments
+);
+
+// 9. Mark conversation as read
 router.patch(
     "/conversations/:conversationId/read",
     checkAuth(Role.PATIENT, Role.DOCTOR),
     ChatController.markConversationAsRead
 );
 
-// 8. Delete message (soft delete by sender)
+// 10. Delete message (soft delete by sender)
 router.delete(
     "/messages/:messageId",
     checkAuth(Role.PATIENT, Role.DOCTOR),

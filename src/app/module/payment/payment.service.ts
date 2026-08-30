@@ -83,7 +83,7 @@ const createCheckoutSession = async (payload: ICreateCheckoutSessionPayload, use
         line_items: [
             {
                 price_data: {
-                    currency: "usd",
+                    currency: "bdt",
                     product_data: {
                         name: `Doctor Appointment - Dr. ${appointment.doctor.name}`,
                         description: `Consultation schedule: ${new Date(appointment.schedule.startDateTime).toUTCString()}`,
@@ -583,7 +583,7 @@ const getPaymentInvoice = async (paymentIdOrAppointmentId: string, user: IReques
         appointmentId: appointment.id,
         paymentStatus: payment.status,
         amount: payment.amount,
-        currency: "USD",
+        currency: "BDT",
         paymentDate: formattedDate,
         patient: {
             id: appointment.patient.id,

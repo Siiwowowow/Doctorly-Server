@@ -1,3 +1,5 @@
+/* eslint-disable prefer-const */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import status from "http-status";
 import { Patient, Prisma } from "../../../generated/prisma/client";
 import { BloodGroup, Gender, Role, UserStatus } from "../../../generated/prisma/enums";
@@ -9,10 +11,45 @@ import { QueryBuilder } from "../../utils/QueryBuilder";
 import { patientFilterableFields, patientIncludeConfig, patientSearchableFields } from "./patient.constant";
 import { IUpdatePatientPayload } from "./patient.interface";
 
+const normalizeBloodGroup = (bg?: string | BloodGroup | null): BloodGroup | undefined => {
+    if (!bg) return undefined;
+    const map: Record<string, BloodGroup> = {
+        "A+": BloodGroup.A_POSITIVE,
+        "A-": BloodGroup.A_NEGATIVE,
+        "B+": BloodGroup.B_POSITIVE,
+        "B-": BloodGroup.B_NEGATIVE,
+        "AB+": BloodGroup.AB_POSITIVE,
+        "AB-": BloodGroup.AB_NEGATIVE,
+        "O+": BloodGroup.O_POSITIVE,
+        "O-": BloodGroup.O_NEGATIVE,
+        A_POSITIVE: BloodGroup.A_POSITIVE,
+        A_NEGATIVE: BloodGroup.A_NEGATIVE,
+        B_POSITIVE: BloodGroup.B_POSITIVE,
+        B_NEGATIVE: BloodGroup.B_NEGATIVE,
+        AB_POSITIVE: BloodGroup.AB_POSITIVE,
+        AB_NEGATIVE: BloodGroup.AB_NEGATIVE,
+        O_POSITIVE: BloodGroup.O_POSITIVE,
+        O_NEGATIVE: BloodGroup.O_NEGATIVE,
+    };
+    return map[bg] || undefined;
+};
+
+const formatPatientResponse = (patient: any) => {
+    if (!patient) return patient;
+    return {
+        ...patient,
+        bloodGroup: patient.patientHealthData?.bloodGroup || patient.bloodGroup || null,
+        gender: patient.patientHealthData?.gender || null,
+    };
+};
+
 const getMyProfile = async (user: IRequestUser) => {
-    const patient = await prisma.patient.findFirst({
+    let patient = await prisma.patient.findFirst({
         where: {
-            userId: user.userId,
+            OR: [
+                { userId: user.userId },
+                { email: user.email },
+            ],
             isDeleted: false,
         },
         include: {
@@ -52,16 +89,70 @@ const getMyProfile = async (user: IRequestUser) => {
     });
 
     if (!patient) {
+        const dbUser = await prisma.user.findUnique({
+            where: { id: user.userId },
+        });
+
+        if (dbUser && dbUser.role === Role.PATIENT) {
+            patient = await prisma.patient.create({
+                data: {
+                    userId: dbUser.id,
+                    name: dbUser.name,
+                    email: dbUser.email,
+                    profilePhoto: dbUser.image,
+                },
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                            image: true,
+                            role: true,
+                            status: true,
+                            emailVerified: true,
+                            createdAt: true,
+                            updatedAt: true,
+                        },
+                    },
+                    patientHealthData: true,
+                    appointments: {
+                        include: {
+                            doctor: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    email: true,
+                                    profilePhoto: true,
+                                    designation: true,
+                                    qualification: true,
+                                },
+                            },
+                            schedule: true,
+                        },
+                    },
+                    prescriptions: true,
+                    medicalReports: true,
+                    reviews: true,
+                },
+            });
+        }
+    }
+
+    if (!patient) {
         throw new AppError(status.NOT_FOUND, "Patient profile not found");
     }
 
-    return patient;
+    return formatPatientResponse(patient);
 };
 
 const getPatientById = async (id: string, user: IRequestUser) => {
     const patient = await prisma.patient.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
         include: {
@@ -109,13 +200,16 @@ const getPatientById = async (id: string, user: IRequestUser) => {
         throw new AppError(status.FORBIDDEN, "Forbidden access! You cannot view another patient's profile");
     }
 
-    return patient;
+    return formatPatientResponse(patient);
 };
 
 const updatePatient = async (id: string, payload: IUpdatePatientPayload, user: IRequestUser) => {
     const patient = await prisma.patient.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
     });
@@ -129,13 +223,24 @@ const updatePatient = async (id: string, payload: IUpdatePatientPayload, user: I
         throw new AppError(status.FORBIDDEN, "Forbidden access! You cannot update another patient's profile");
     }
 
-    const { patientHealthData, ...patientData } = payload;
+    let { patientHealthData, ...patientData } = payload;
+    const directBloodGroup = (payload as any).bloodGroup;
+    if (directBloodGroup || patientHealthData?.bloodGroup) {
+        const bg = normalizeBloodGroup(directBloodGroup || patientHealthData?.bloodGroup);
+        if (bg) {
+            patientHealthData = {
+                ...(patientHealthData || {}),
+                bloodGroup: bg,
+            };
+        }
+        delete (patientData as any).bloodGroup;
+    }
 
     await prisma.$transaction(async (tx) => {
         // 1. Update basic patient profile
         if (Object.keys(patientData).length > 0) {
             await tx.patient.update({
-                where: { id },
+                where: { id: patient.id },
                 data: patientData,
             });
 
@@ -154,37 +259,42 @@ const updatePatient = async (id: string, payload: IUpdatePatientPayload, user: I
 
         // 2. Upsert patient health data if provided
         if (patientHealthData && Object.keys(patientHealthData).length > 0) {
-            const { dateOfBirth, ...restHealthData } = patientHealthData;
+            const { dateOfBirth, bloodGroup, ...restHealthData } = patientHealthData;
+            const normalizedBg = bloodGroup ? normalizeBloodGroup(bloodGroup) : undefined;
 
             await tx.patientHealthData.upsert({
                 where: {
-                    patientId: id,
+                    patientId: patient.id,
                 },
                 create: {
-                    patientId: id,
+                    patientId: patient.id,
                     ...restHealthData,
                     dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : new Date(),
-                    gender: restHealthData.gender || Gender.MALE,
-                    bloodGroup: restHealthData.bloodGroup || BloodGroup.O_POSITIVE,
+                    gender: (restHealthData.gender as Gender) || Gender.MALE,
+                    bloodGroup: normalizedBg || BloodGroup.O_POSITIVE,
                     height: restHealthData.height || "",
                     weight: restHealthData.weight || "",
                 },
                 update: {
                     ...restHealthData,
+                    ...(normalizedBg ? { bloodGroup: normalizedBg } : {}),
                     ...(dateOfBirth ? { dateOfBirth: new Date(dateOfBirth) } : {}),
                 },
             });
         }
     });
 
-    const updatedPatient = await getPatientById(id, user);
-    return updatedPatient;
+    const updatedPatient = await getPatientById(patient.id, user);
+    return formatPatientResponse(updatedPatient);
 };
 
 const deletePatient = async (id: string, user: IRequestUser) => {
     const patient = await prisma.patient.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
     });
@@ -201,7 +311,7 @@ const deletePatient = async (id: string, user: IRequestUser) => {
     await prisma.$transaction(async (tx) => {
         // Soft delete patient record
         await tx.patient.update({
-            where: { id },
+            where: { id: patient.id },
             data: {
                 isDeleted: true,
                 deletedAt: new Date(),
@@ -261,6 +371,10 @@ const getAllPatients = async (query: IQueryParams) => {
         .sort()
         .fields()
         .execute();
+
+    if (result && Array.isArray(result.data)) {
+        result.data = result.data.map(formatPatientResponse);
+    }
 
     return result;
 };

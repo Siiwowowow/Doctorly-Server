@@ -10,20 +10,50 @@ import { doctorFilterableFields, doctorIncludeConfig, doctorSearchableFields } f
 import { IUpdateDoctorPayload } from "./doctor.interface";
 
 const getAllDoctors = async (query: IQueryParams) => {
+    // Support query and searchTerm interchangeably
+    const queryTerm = (query.searchTerm as string) || (query.query as string);
+    const normalizedQuery: IQueryParams = {
+        ...query,
+        searchTerm: queryTerm,
+    };
+
     const queryBuilder = new QueryBuilder<Doctor, Prisma.DoctorWhereInput, Prisma.DoctorInclude>(
         prisma.doctor,
-        query,
+        normalizedQuery,
         {
             searchableFields: doctorSearchableFields,
             filterableFields: doctorFilterableFields,
         }
     );
 
+    // Specialty filter support (by id or title)
+    const specialtyFilter = (query.specialty as string) || (query.specialtyId as string);
+    const specialtyCondition = specialtyFilter && specialtyFilter !== "ALL"
+        ? {
+              specialties: {
+                  some: {
+                      specialty: {
+                          OR: [
+                              { id: specialtyFilter },
+                              { title: { contains: specialtyFilter, mode: "insensitive" as const } },
+                          ],
+                          isDeleted: false,
+                      },
+                  },
+              },
+          }
+        : {};
+
     const result = await queryBuilder
         .search()
         .filter()
         .where({
             isDeleted: false,
+            user: {
+                status: UserStatus.ACTIVE,
+                isDeleted: false,
+            },
+            ...specialtyCondition,
         })
         .include({
             user: {
@@ -46,6 +76,25 @@ const getAllDoctors = async (query: IQueryParams) => {
                     specialty: true,
                 },
             },
+            doctorSchedules: {
+                where: {
+                    isBooked: false,
+                },
+                include: {
+                    schedule: true,
+                },
+            },
+            reviews: {
+                include: {
+                    patient: {
+                        select: {
+                            id: true,
+                            name: true,
+                            profilePhoto: true,
+                        },
+                    },
+                },
+            },
         })
         .dynamicInclude(doctorIncludeConfig)
         .paginate()
@@ -59,8 +108,15 @@ const getAllDoctors = async (query: IQueryParams) => {
 const getDoctorById = async (id: string) => {
     const doctor = await prisma.doctor.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
+            user: {
+                status: UserStatus.ACTIVE,
+                isDeleted: false,
+            },
         },
         include: {
             user: {
@@ -84,16 +140,29 @@ const getDoctorById = async (id: string) => {
                 },
             },
             doctorSchedules: {
+                where: {
+                    isBooked: false,
+                },
                 include: {
                     schedule: true,
                 },
             },
-            reviews: true,
+            reviews: {
+                include: {
+                    patient: {
+                        select: {
+                            id: true,
+                            name: true,
+                            profilePhoto: true,
+                        },
+                    },
+                },
+            },
         },
     });
 
     if (!doctor) {
-        throw new AppError(status.NOT_FOUND, "Doctor not found");
+        throw new AppError(status.NOT_FOUND, "Doctor not found or is not currently active");
     }
 
     return doctor;
@@ -102,7 +171,10 @@ const getDoctorById = async (id: string) => {
 const updateDoctor = async (id: string, payload: IUpdateDoctorPayload) => {
     const isDoctorExist = await prisma.doctor.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
     });
@@ -117,7 +189,7 @@ const updateDoctor = async (id: string, payload: IUpdateDoctorPayload) => {
         if (doctorData) {
             await tx.doctor.update({
                 where: {
-                    id,
+                    id: isDoctorExist.id,
                 },
                 data: {
                     ...doctorData,
@@ -133,7 +205,7 @@ const updateDoctor = async (id: string, payload: IUpdateDoctorPayload) => {
                     const existingRelation = await tx.doctorSpecialty.findUnique({
                         where: {
                             doctorId_specialtyId: {
-                                doctorId: id,
+                                doctorId: isDoctorExist.id,
                                 specialtyId,
                             },
                         },
@@ -143,7 +215,7 @@ const updateDoctor = async (id: string, payload: IUpdateDoctorPayload) => {
                         await tx.doctorSpecialty.delete({
                             where: {
                                 doctorId_specialtyId: {
-                                    doctorId: id,
+                                    doctorId: isDoctorExist.id,
                                     specialtyId,
                                 },
                             },
@@ -165,12 +237,12 @@ const updateDoctor = async (id: string, payload: IUpdateDoctorPayload) => {
                     await tx.doctorSpecialty.upsert({
                         where: {
                             doctorId_specialtyId: {
-                                doctorId: id,
+                                doctorId: isDoctorExist.id,
                                 specialtyId,
                             },
                         },
                         create: {
-                            doctorId: id,
+                            doctorId: isDoctorExist.id,
                             specialtyId,
                         },
                         update: {},
@@ -180,7 +252,7 @@ const updateDoctor = async (id: string, payload: IUpdateDoctorPayload) => {
         }
     });
 
-    const doctor = await getDoctorById(id);
+    const doctor = await getDoctorById(isDoctorExist.id);
     return doctor;
 };
 
@@ -188,7 +260,10 @@ const updateDoctor = async (id: string, payload: IUpdateDoctorPayload) => {
 const deleteDoctor = async (id: string) => {
     const isDoctorExist = await prisma.doctor.findFirst({
         where: {
-            id,
+            OR: [
+                { id },
+                { userId: id },
+            ],
             isDeleted: false,
         },
         include: { user: true },
@@ -200,7 +275,7 @@ const deleteDoctor = async (id: string) => {
 
     await prisma.$transaction(async (tx) => {
         await tx.doctor.update({
-            where: { id },
+            where: { id: isDoctorExist.id },
             data: {
                 isDeleted: true,
                 deletedAt: new Date(),

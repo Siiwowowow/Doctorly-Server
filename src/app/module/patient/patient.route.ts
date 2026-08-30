@@ -9,9 +9,11 @@ const router = Router();
 
 router.get("/me", checkAuth(Role.PATIENT, Role.ADMIN, Role.SUPER_ADMIN), PatientController.getMyProfile);
 
+router.get("/profile", checkAuth(Role.PATIENT, Role.ADMIN, Role.SUPER_ADMIN), PatientController.getMyProfile);
+
 router.get("/", checkAuth(Role.ADMIN, Role.SUPER_ADMIN), PatientController.getAllPatients);
 
-router.get("/:id", checkAuth(Role.PATIENT, Role.ADMIN, Role.SUPER_ADMIN), PatientController.getPatientById);
+router.get("/:id", checkAuth(Role.PATIENT, Role.DOCTOR, Role.ADMIN, Role.SUPER_ADMIN), PatientController.getPatientById);
 
 router.patch(
     "/:id",

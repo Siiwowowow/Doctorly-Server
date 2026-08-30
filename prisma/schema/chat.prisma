@@ -1,17 +1,17 @@
 model Conversation {
-  id            String                    @id @default(uuid(7))
+  id            String    @id @default(uuid(7))
   patientId     String
-  patient       Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctorId      String
-  doctor        Doctor                    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  doctor        Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   lastMessageAt DateTime?
-  isDeleted     Boolean                   @default(false)
+  isDeleted     Boolean   @default(false)
   deletedAt     DateTime?
-  createdAt     DateTime                  @default(now())
-  updatedAt     DateTime                  @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  participants  ConversationParticipant[]
-  messages      Message[]
+  participants ConversationParticipant[]
+  messages     Message[]
 
   @@unique([patientId, doctorId])
   @@index([patientId])
@@ -38,23 +38,28 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String              @id @default(uuid(7))
+  id             String        @id @default(uuid(7))
   conversationId String
-  conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderId       String
-  sender         User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  content        String              @db.Text
-  messageType    MessageType         @default(TEXT)
-  status         MessageStatus       @default(SENT)
-  isDeleted      Boolean             @default(false)
+  sender         User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String        @db.Text
+  messageType    MessageType   @default(TEXT)
+  status         MessageStatus @default(SENT)
+  isDeleted      Boolean       @default(false)
   deletedAt      DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  attachments    MessageAttachment[]
+  medicalRecordId String?
+  medicalRecord   MedicalRecord? @relation(fields: [medicalRecordId], references: [id], onDelete: SetNull)
+
+  attachments MessageAttachment[]
 
   @@index([conversationId, createdAt])
   @@index([senderId])
+  @@index([medicalRecordId])
+  @@index([messageType])
   @@index([status])
   @@index([isDeleted])
   @@map("messages")

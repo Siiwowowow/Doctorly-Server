@@ -85,7 +85,10 @@ export const checkAuth = (...authRoles: Role[]) => async (req: Request, res: Res
 
         // 3. Role Authorization
         if (authRoles.length > 0 && !authRoles.includes(user.role)) {
-            throw new AppError(status.FORBIDDEN, "Forbidden access! You do not have permission to access this resource.");
+            throw new AppError(
+                status.FORBIDDEN,
+                `Forbidden access! Required roles: [${authRoles.join(", ")}], but your role is: ${user.role}`
+            );
         }
 
         // 4. Attach request user

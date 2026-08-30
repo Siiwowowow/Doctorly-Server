@@ -41,9 +41,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser())
 
-cron.schedule("*/25 * * * *", async () => {
+// Periodically auto-remove unpaid appointments older than 12 hours
+cron.schedule("*/30 * * * *", async () => {
     try {
-        logger.info("Running cron job to cancel unpaid appointments...");
         await AppointmentService.cancelUnpaidAppointments();
     } catch (error: any) {
         logger.error("Error occurred while canceling unpaid appointments:", error.message);    

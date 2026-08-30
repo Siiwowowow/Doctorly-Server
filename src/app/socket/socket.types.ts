@@ -91,7 +91,7 @@ export interface ClientToServerEvents {
     "presence:get": (payload: { userId: string } | { userIds: string[] }, callback?: (presence: IPresenceStatusPayload | IPresenceStatusPayload[]) => void) => void;
     "chat:join-conversation": (payload: { conversationId: string }, callback?: (status: { success: boolean; error?: string }) => void) => void;
     "chat:leave-conversation": (payload: { conversationId: string }) => void;
-    "chat:send": (payload: IChatMessagePayload, callback?: (status: { success: boolean; error?: string }) => void) => void;
+    "chat:send": (payload: IChatMessagePayload, callback?: (status: { success: boolean; data?: unknown; error?: string }) => void) => void;
     "chat:typing": (payload: IChatTypingPayload) => void;
     "chat:stop-typing": (payload: IChatTypingPayload) => void;
     "chat:read": (payload: { conversationId: string }, callback?: (status: { success: boolean; error?: string }) => void) => void;
@@ -112,7 +112,7 @@ export interface ServerToClientEvents {
     "notification:new": (notification: INotificationPayload) => void;
     "presence:online": (payload: IPresenceStatusPayload) => void;
     "presence:offline": (payload: IPresenceStatusPayload) => void;
-    "chat:message": (payload: { senderId: string; content: string; conversationId?: string; timestamp: string; tempId?: string }) => void;
+    "chat:message": (payload: { id?: string; senderId: string; content: string; conversationId?: string; tempId?: string; messageType?: string; status?: string; createdAt?: string; updatedAt?: string; timestamp?: string }) => void;
     "chat:typing": (payload: { senderId: string; conversationId?: string }) => void;
     "chat:stop-typing": (payload: { senderId: string; conversationId?: string }) => void;
     "chat:read": (payload: { conversationId: string; readerId: string; readAt: string }) => void;

@@ -40,7 +40,19 @@ TInclude = Record<string, unknown>
         const { searchableFields} = this.config;
         // doctorSearchableFields = ['user.name', 'user.email', 'specialties.specialty.title' , 'specialties.specialty.description']
         if(searchTerm && searchableFields && searchableFields.length > 0){
-            const searchConditions : Record<string, unknown>[] = searchableFields.map((field) => {
+            const searchTermStr = searchTerm as string;
+            // Basic UUID regex check
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(searchTermStr);
+
+            const validFields = searchableFields.filter((field) => {
+                // If it's not a UUID, skip fields that are IDs (like id, patientId, appointmentId)
+                if (!isUuid && (field === 'id' || field.endsWith('Id'))) {
+                    return false;
+                }
+                return true;
+            });
+
+            const searchConditions : Record<string, unknown>[] = validFields.map((field) => {
                 if(field.includes(".")){
                     const parts = field.split(".");
 
@@ -52,10 +64,31 @@ TInclude = Record<string, unknown>
                             mode : 'insensitive' as const,
                         }
 
-                        return {
-                            [relation] : {
-                                [nestedField] : stringFilter
-                            }
+                        const isCollectionRelation2 = [
+                            "specialties",
+                            "medicines",
+                            "appointments",
+                            "doctorSchedules",
+                            "prescriptions",
+                            "medicalReports",
+                            "reviews",
+                            "medicalRecords",
+                        ].includes(relation);
+
+                        if (isCollectionRelation2) {
+                            return {
+                                [relation]: {
+                                    some: {
+                                        [nestedField]: stringFilter,
+                                    },
+                                },
+                            };
+                        } else {
+                            return {
+                                [relation]: {
+                                    [nestedField]: stringFilter,
+                                },
+                            };
                         }
                     } else if (parts.length === 3) {
                         const [relation, nestedRelation, nestedField] = parts;

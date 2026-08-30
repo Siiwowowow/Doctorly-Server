@@ -7,6 +7,9 @@ dist
 /src/generated
 
 # Audit files
-*audit*.md
-*AUDIT*.md
 generate_audit_dump.js
+
+# Ignore all markdown and cjs files
+*.md
+!README.md
+*.cjs

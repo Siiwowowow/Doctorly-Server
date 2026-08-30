@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { DoctorApplicationRoutes } from "../module/doctorApplication/doctorApplication.route";
 import { AdminRoutes } from "../module/admin/admin.route";
 import { AppointmentRoutes } from "../module/appointment/appointment.route";
 import { AuthRoutes } from "../module/auth/auth.route";
@@ -32,5 +33,6 @@ router.use("/payments", PaymentRoutes);
 router.use("/notifications", NotificationRoutes);
 router.use("/chat", ChatRoutes);
 router.use("/calls", CallRoutes);
+router.use("/doctor-applications", DoctorApplicationRoutes);
 
 export const IndexRoutes = router;

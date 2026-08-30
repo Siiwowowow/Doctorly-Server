@@ -1,0 +1,55 @@
+model DoctorApplication {
+  id     String @id @default(uuid(7))
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Personal Info
+  fullName String
+  email    String
+  phone    String
+  address  String?
+  city     String?
+  country  String?
+
+  // Professional Info
+  bmdcRegistrationNumber String?
+  registrationType       String?
+  qualifications         String?
+  experienceYears        Int?
+  currentWorkplace       String?
+  designation            String?
+  consultationFee        Float?
+  about                  String?
+
+  // Relations
+  specialtyId String?
+  specialty   Specialty? @relation(fields: [specialtyId], references: [id])
+
+  status          DoctorApplicationStatus @default(DRAFT)
+  rejectionReason String?
+
+  documents DoctorApplicationDocument[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("doctor_application")
+}
+
+model DoctorApplicationDocument {
+  id            String            @id @default(uuid(7))
+  applicationId String
+  application   DoctorApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  documentType String // e.g., "BMDC_CERTIFICATE", "MEDICAL_DEGREE", "PASSPORT"
+  documentName String
+  fileUrl      String
+
+  verificationStatus DocumentVerificationStatus @default(PENDING)
+  adminNote          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("doctor_application_document")
+}

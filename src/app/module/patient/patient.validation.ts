@@ -1,19 +1,10 @@
 import z from "zod";
-import { BloodGroup, Gender } from "../../../generated/prisma/enums";
+import { Gender } from "../../../generated/prisma/enums";
 
 export const updatePatientHealthDataZodSchema = z.object({
     gender: z.enum([Gender.MALE, Gender.FEMALE, Gender.OTHER], { message: "Gender must be MALE, FEMALE, or OTHER" }).optional(),
     dateOfBirth: z.string().datetime({ message: "Invalid date format" }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Date must be in YYYY-MM-DD format" })).optional(),
-    bloodGroup: z.enum([
-        BloodGroup.A_POSITIVE,
-        BloodGroup.A_NEGATIVE,
-        BloodGroup.B_POSITIVE,
-        BloodGroup.B_NEGATIVE,
-        BloodGroup.AB_POSITIVE,
-        BloodGroup.AB_NEGATIVE,
-        BloodGroup.O_POSITIVE,
-        BloodGroup.O_NEGATIVE,
-    ], { message: "Invalid blood group" }).optional(),
+    bloodGroup: z.string().optional(),
     hasAllergies: z.boolean().optional(),
     hasDiabetes: z.boolean().optional(),
     height: z.string().max(20, "Height must be at most 20 characters").optional(),
@@ -34,6 +25,7 @@ export const updatePatientZodSchema = z.object({
     profilePhoto: z.string().url("Profile photo must be a valid URL").optional(),
     contactNumber: z.string().min(11, "Contact number must be at least 11 characters").max(15, "Contact number must be at most 15 characters").optional(),
     address: z.string().min(5, "Address must be at least 5 characters").max(100, "Address must be at most 100 characters").optional(),
+    bloodGroup: z.string().optional(),
     patientHealthData: updatePatientHealthDataZodSchema.optional(),
 });
 

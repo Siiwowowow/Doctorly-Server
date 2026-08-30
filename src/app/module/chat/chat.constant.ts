@@ -20,6 +20,18 @@ export const defaultMessageInclude = {
         },
     },
     attachments: true,
+    medicalRecord: {
+        select: {
+            id: true,
+            diagnosis: true,
+            symptoms: true,
+            clinicalNotes: true,
+            treatment: true,
+            advice: true,
+            followUpDate: true,
+            createdAt: true,
+        },
+    },
 };
 
 export const defaultConversationInclude = {

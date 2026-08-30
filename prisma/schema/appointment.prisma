@@ -1,31 +1,31 @@
 model Appointment {
-    id             String            @id @default(uuid(7))
-    videoCallingId String            @unique @db.Uuid()
-    status         AppointmentStatus @default(SCHEDULED)
-    paymentStatus  PaymentStatus     @default(UNPAID)
-    createdAt      DateTime          @default(now())
-    updatedAt      DateTime          @updatedAt
+  id             String            @id @default(uuid(7))
+  videoCallingId String            @unique @db.Uuid()
+  status         AppointmentStatus @default(SCHEDULED)
+  paymentStatus  PaymentStatus     @default(UNPAID)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-    patientId String
-    patient   Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Restrict)
 
-    doctorId String
-    doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  doctorId String
+  doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Restrict)
 
-    scheduleId String
-    schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  scheduleId String
+  schedule   Schedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
 
-    prescription  Prescription?
-    review        Review?
-    payment       Payment?
-    medicalRecord MedicalRecord?
-    calls         Call[]
+  prescription  Prescription?
+  review        Review?
+  payment       Payment?
+  medicalRecord MedicalRecord?
+  calls         Call[]
 
-    @@index([patientId])
-    @@index([doctorId])
-    @@index([scheduleId])
-    @@index([status])
-    @@index([doctorId, scheduleId, status])
-    @@index([patientId, status])
-    @@map("appointments")
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([scheduleId])
+  @@index([status])
+  @@index([doctorId, scheduleId, status])
+  @@index([patientId, status])
+  @@map("appointments")
 }

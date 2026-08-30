@@ -46,12 +46,12 @@ const createAppointment = async (payload: IBookAppointmentPayload, user: IReques
         },
     });
 
-    if (!doctor) {
+    if (!doctor || doctor.isDeleted) {
         throw new AppError(status.NOT_FOUND, "Doctor not found or is inactive");
     }
 
-    if (doctor.user.status === UserStatus.BLOCKED || doctor.user.isDeleted || doctor.user.status === UserStatus.DELETED) {
-        throw new AppError(status.FORBIDDEN, "Doctor is currently inactive");
+    if (doctor.user.status !== UserStatus.ACTIVE || doctor.user.isDeleted) {
+        throw new AppError(status.FORBIDDEN, "Doctor is currently inactive or not verified");
     }
 
     // 3. Resolve & validate schedule
@@ -217,7 +217,10 @@ const getMyAppointments = async (user: IRequestUser, query: IQueryParams) => {
         if (!doctor) {
             throw new AppError(status.NOT_FOUND, "Doctor profile not found");
         }
-        whereFilter = { doctorId: doctor.id };
+        whereFilter = { 
+            doctorId: doctor.id,
+            paymentStatus: PaymentStatus.PAID 
+        };
     } else if (user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN) {
         whereFilter = {};
     } else {
@@ -273,57 +276,128 @@ const getMyAppointments = async (user: IRequestUser, query: IQueryParams) => {
 };
 
 const getAppointmentById = async (id: string, user: IRequestUser) => {
-    const appointment = await prisma.appointment.findUnique({
-        where: { id },
-        include: {
-            doctor: {
-                select: {
-                    id: true,
-                    userId: true,
-                    name: true,
-                    email: true,
-                    profilePhoto: true,
-                    designation: true,
-                    qualification: true,
-                    appointmentFee: true,
-                    user: {
-                        select: {
-                            id: true,
-                            name: true,
-                            email: true,
-                            image: true,
-                            role: true,
-                            status: true,
-                        },
+    const includeConfig = {
+        doctor: {
+            select: {
+                id: true,
+                userId: true,
+                name: true,
+                email: true,
+                profilePhoto: true,
+                designation: true,
+                qualification: true,
+                appointmentFee: true,
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        image: true,
+                        role: true,
+                        status: true,
                     },
                 },
             },
-            patient: {
-                select: {
-                    id: true,
-                    userId: true,
-                    name: true,
-                    email: true,
-                    profilePhoto: true,
-                    contactNumber: true,
-                    user: {
-                        select: {
-                            id: true,
-                            name: true,
-                            email: true,
-                            image: true,
-                            role: true,
-                            status: true,
-                        },
-                    },
-                },
-            },
-            schedule: true,
-            prescription: true,
-            review: true,
-            payment: true,
         },
+        patient: {
+            select: {
+                id: true,
+                userId: true,
+                name: true,
+                email: true,
+                profilePhoto: true,
+                contactNumber: true,
+                address: true,
+                patientHealthData: {
+                    select: {
+                        bloodGroup: true,
+                    },
+                },
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        image: true,
+                        role: true,
+                        status: true,
+                    },
+                },
+            },
+        },
+        schedule: true,
+        prescription: true,
+        review: true,
+        payment: true,
+    };
+
+    let appointment = await prisma.appointment.findUnique({
+        where: { id },
+        include: includeConfig,
     });
+
+    if (!appointment) {
+        let doctorFilter = {};
+        if (user.role === Role.DOCTOR) {
+            const doctor = await prisma.doctor.findFirst({
+                where: { userId: user.userId, isDeleted: false },
+            });
+            if (doctor) {
+                doctorFilter = { doctorId: doctor.id };
+            }
+        } else if (user.role === Role.PATIENT) {
+            const patient = await prisma.patient.findFirst({
+                where: { userId: user.userId, isDeleted: false },
+            });
+            if (patient) {
+                doctorFilter = { patientId: patient.id };
+            }
+        }
+
+        const cleanSearch = id.trim();
+        appointment = await prisma.appointment.findFirst({
+            where: {
+                ...doctorFilter,
+                OR: [
+                    { id: { contains: cleanSearch, mode: "insensitive" } },
+                    { patientId: { contains: cleanSearch, mode: "insensitive" } },
+                    {
+                        patient: {
+                            name: { contains: cleanSearch, mode: "insensitive" },
+                        },
+                    },
+                    {
+                        patient: {
+                            email: { contains: cleanSearch, mode: "insensitive" },
+                        },
+                    },
+                    {
+                        patient: {
+                            contactNumber: { contains: cleanSearch, mode: "insensitive" },
+                        },
+                    },
+                    {
+                        patient: {
+                            user: {
+                                email: { contains: cleanSearch, mode: "insensitive" },
+                            },
+                        },
+                    },
+                    {
+                        patient: {
+                            user: {
+                                name: { contains: cleanSearch, mode: "insensitive" },
+                            },
+                        },
+                    },
+                ],
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+            include: includeConfig,
+        });
+    }
 
     if (!appointment) {
         throw new AppError(status.NOT_FOUND, "Appointment not found");
@@ -573,14 +647,14 @@ const getAllAppointments = async (query: IQueryParams) => {
 };
 
 const cancelUnpaidAppointments = async () => {
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
 
     const unpaidAppointments = await prisma.appointment.findMany({
         where: {
             status: AppointmentStatus.SCHEDULED,
             paymentStatus: PaymentStatus.UNPAID,
             createdAt: {
-                lte: thirtyMinutesAgo,
+                lte: twelveHoursAgo,
             },
         },
     });
@@ -592,12 +666,15 @@ const cancelUnpaidAppointments = async () => {
     const appointmentIdsToCancel = unpaidAppointments.map((app) => app.id);
 
     await prisma.$transaction(async (tx) => {
-        await tx.appointment.updateMany({
+        await tx.payment.deleteMany({
+            where: {
+                appointmentId: { in: appointmentIdsToCancel },
+            },
+        });
+
+        await tx.appointment.deleteMany({
             where: {
                 id: { in: appointmentIdsToCancel },
-            },
-            data: {
-                status: AppointmentStatus.CANCELED,
             },
         });
 
