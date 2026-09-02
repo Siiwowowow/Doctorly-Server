@@ -30,35 +30,57 @@ export const socketAuthMiddleware = async (
         const rawCookieHeader = socket.handshake.headers.cookie;
         const cookies = parseCookies(rawCookieHeader);
 
-        // 1. Resolve session token from cookie or handshake auth
+        // 1. Resolve access token & session token from cookies, handshake auth, or headers
+        let accessToken = cookies["accessToken"] || (socket.handshake.auth?.token as string | undefined) || (socket.handshake.auth?.accessToken as string | undefined);
         const sessionToken = cookies["better-auth.session_token"] || (socket.handshake.auth?.sessionToken as string | undefined);
 
-        if (!sessionToken) {
-            logger.warn(`[SocketAuth] Connection rejected for socket ${socket.id}: No session token`);
-            return next(new Error("Unauthorized: No session token provided"));
+        if (!accessToken && socket.handshake.headers.authorization) {
+            const authHeader = socket.handshake.headers.authorization;
+            if (authHeader.startsWith("Bearer ")) {
+                accessToken = authHeader.substring(7);
+            }
         }
 
-        // 2. Validate Session in Database
-        const session = await prisma.session.findFirst({
-            where: {
-                token: sessionToken,
-                expiresAt: {
-                    gt: new Date(),
+        let resolvedUserId: string | null = null;
+
+        // 2. Try validating JWT access token first
+        if (accessToken) {
+            const verifiedToken = jwtUtils.verifyToken(accessToken, envVars.ACCESS_TOKEN_SECRET);
+            if (verifiedToken.success && verifiedToken.data) {
+                resolvedUserId = verifiedToken.data.userId;
+            }
+        }
+
+        // 3. If access token verification did not resolve a user, fallback to session token in DB
+        let user = null;
+        if (resolvedUserId) {
+            user = await prisma.user.findUnique({
+                where: { id: resolvedUserId },
+            });
+        } else if (sessionToken) {
+            const session = await prisma.session.findFirst({
+                where: {
+                    token: sessionToken,
+                    expiresAt: {
+                        gt: new Date(),
+                    },
                 },
-            },
-            include: {
-                user: true,
-            },
-        });
-
-        if (!session || !session.user) {
-            logger.warn(`[SocketAuth] Connection rejected for socket ${socket.id}: Invalid or expired session`);
-            return next(new Error("Unauthorized: Invalid or expired session"));
+                include: {
+                    user: true,
+                },
+            });
+            if (session && session.user) {
+                user = session.user;
+                resolvedUserId = session.user.id;
+            }
         }
 
-        const user = session.user;
+        if (!user || !resolvedUserId) {
+            logger.warn(`[SocketAuth] Connection rejected for socket ${socket.id}: No valid access token or session`);
+            return next(new Error("Unauthorized: Invalid or expired authentication credentials"));
+        }
 
-        // 3. User status validation
+        // 4. User status validation
         if (user.status === UserStatus.BLOCKED) {
             logger.warn(`[SocketAuth] Connection rejected: User ${user.id} is blocked`);
             return next(new Error("Forbidden: Your account is blocked"));
@@ -69,41 +91,6 @@ export const socketAuthMiddleware = async (
             return next(new Error("Unauthorized: Your account has been deleted"));
         }
 
-        if (!user.emailVerified) {
-            logger.warn(`[SocketAuth] Connection rejected: User ${user.id} is unverified`);
-            return next(new Error("Forbidden: Please verify your email address first"));
-        }
-
-        // 4. Resolve and validate Access Token from cookie or handshake auth/headers
-        let accessToken = cookies["accessToken"] || (socket.handshake.auth?.token as string | undefined);
-
-        if (!accessToken && socket.handshake.headers.authorization) {
-            const authHeader = socket.handshake.headers.authorization;
-            if (authHeader.startsWith("Bearer ")) {
-                accessToken = authHeader.substring(7);
-            }
-        }
-
-        if (!accessToken) {
-            logger.warn(`[SocketAuth] Connection rejected for user ${user.id}: Missing access token`);
-            return next(new Error("Unauthorized: No access token provided"));
-        }
-
-        const verifiedToken = jwtUtils.verifyToken(accessToken, envVars.ACCESS_TOKEN_SECRET);
-
-        if (!verifiedToken.success || !verifiedToken.data) {
-            logger.warn(`[SocketAuth] Connection rejected for user ${user.id}: Invalid access token`);
-            return next(new Error("Unauthorized: Invalid or expired access token"));
-        }
-
-        const tokenData = verifiedToken.data;
-
-        // Ensure session identity matches token identity
-        if (tokenData.userId !== user.id) {
-            logger.warn(`[SocketAuth] Connection rejected: Identity mismatch (Token: ${tokenData.userId}, Session: ${user.id})`);
-            return next(new Error("Unauthorized: Session and token identity mismatch"));
-        }
-
         // 5. Attach trusted user identity to socket data
         socket.data.user = {
             userId: user.id,
@@ -111,6 +98,7 @@ export const socketAuthMiddleware = async (
             email: user.email,
         };
 
+        logger.info(`[SocketAuth] User ${user.id} (${user.role}) authenticated successfully`);
         next();
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -118,3 +106,4 @@ export const socketAuthMiddleware = async (
         next(new Error("Internal server error during socket authentication"));
     }
 };
+

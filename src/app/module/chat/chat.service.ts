@@ -680,11 +680,18 @@ const markConversationAsRead = async (conversationId: string, user: IRequestUser
     try {
         const convRoom = getConversationRoom(conversationId);
         const io = getSocketIO();
-        io.to(convRoom).emit(SOCKET_EVENTS.CHAT_READ, {
+        const readPayload = {
             conversationId,
             readerId: user.userId,
             readAt: now.toISOString(),
-        });
+        };
+
+        io.to(convRoom).emit(SOCKET_EVENTS.CHAT_READ, readPayload);
+
+        const otherParticipant = conversation.participants.find((p) => p.userId !== user.userId);
+        if (otherParticipant) {
+            emitToUser(otherParticipant.userId, SOCKET_EVENTS.CHAT_READ, readPayload);
+        }
     } catch {
         // Safe fallback if Socket.IO is not initialized
     }

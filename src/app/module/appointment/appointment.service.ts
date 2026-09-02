@@ -8,6 +8,8 @@ import { IRequestUser } from "../../interfaces/requestUser.interface";
 import { prisma } from "../../lib/prisma";
 import { QueryBuilder } from "../../utils/QueryBuilder";
 import { NotificationService } from "../notification/notification.service";
+import { emitToUser } from "../../socket/socket.server";
+import { SOCKET_EVENTS } from "../../socket/socket.events";
 import {
     appointmentFilterableFields,
     appointmentIncludeConfig,
@@ -189,6 +191,32 @@ const createAppointment = async (payload: IBookAppointmentPayload, user: IReques
 
         return newAppointment;
     });
+
+    // Real-time Socket.IO emission to patient and doctor
+    try {
+        const realtimePayload = {
+            id: appointment.id,
+            patientId: appointment.patientId,
+            doctorId: appointment.doctorId,
+            scheduleId: appointment.scheduleId,
+            status: appointment.status,
+            paymentStatus: appointment.paymentStatus,
+            doctor: appointment.doctor,
+            patient: appointment.patient,
+            schedule: appointment.schedule,
+            createdAt: appointment.createdAt,
+        };
+
+        emitToUser(patient.userId, SOCKET_EVENTS.APPOINTMENT_CREATED, realtimePayload);
+        emitToUser(doctor.userId, SOCKET_EVENTS.APPOINTMENT_CREATED, realtimePayload);
+        emitToUser(doctor.userId, SOCKET_EVENTS.SCHEDULE_UPDATED, {
+            doctorId: payload.doctorId,
+            scheduleId: payload.scheduleId,
+            isBooked: true,
+        });
+    } catch {
+        // Fallback safely if socket emission fails
+    }
 
     return appointment;
 };
@@ -590,6 +618,35 @@ const changeAppointmentStatus = async (
 
         return updated;
     });
+
+    // Real-time Socket.IO emission on status change
+    try {
+        const realtimePayload = {
+            id: result.id,
+            patientId: result.patientId,
+            doctorId: result.doctorId,
+            scheduleId: result.scheduleId,
+            status: result.status,
+            paymentStatus: result.paymentStatus,
+            doctor: result.doctor,
+            patient: result.patient,
+            schedule: result.schedule,
+        };
+
+        const eventName = newStatus === AppointmentStatus.CANCELED ? SOCKET_EVENTS.APPOINTMENT_CANCELED : SOCKET_EVENTS.APPOINTMENT_UPDATED;
+        emitToUser(appointment.patient.userId, eventName, realtimePayload);
+        emitToUser(appointment.doctor.userId, eventName, realtimePayload);
+
+        if (newStatus === AppointmentStatus.CANCELED) {
+            emitToUser(appointment.doctor.userId, SOCKET_EVENTS.SCHEDULE_UPDATED, {
+                doctorId: appointment.doctorId,
+                scheduleId: appointment.scheduleId,
+                isBooked: false,
+            });
+        }
+    } catch {
+        // Fallback safely
+    }
 
     return result;
 };

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Server } from "socket.io";
 import z from "zod";
 import { prisma } from "../lib/prisma";
@@ -158,59 +159,63 @@ export const registerSocketHandlers = (
 
             const validPayload = parseResult.data;
 
-            // 1. Instantly broadcast to recipient for real-time <50ms delivery
-            const optimisticId = validPayload.tempId || "temp-" + Date.now();
-            const messageData = {
-                id: optimisticId,
-                senderId: user.userId,
+            if (!validPayload.conversationId) {
+                if (callback && typeof callback === "function") {
+                    callback({ success: false, error: "Conversation ID is required" });
+                }
+                return;
+            }
+
+            // 1. Persist message to database first to obtain real stable UUID & full relations
+            const persistedMessage = await ChatService.sendMessage(validPayload.conversationId, user, {
                 content: validPayload.content,
-                conversationId: validPayload.conversationId,
                 tempId: validPayload.tempId,
                 messageType: "TEXT",
-                status: "SENT",
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                skipSocketEmit: true, // We broadcast directly below
+            });
+
+            const isRecipientOnline = presenceManager.isUserOnline(validPayload.recipientId);
+            const deliveryStatus = isRecipientOnline ? "DELIVERED" : "SENT";
+
+            const messageBroadcastPayload = {
+                ...persistedMessage,
+                tempId: validPayload.tempId,
+                status: deliveryStatus,
             };
 
-            if (validPayload.conversationId) {
-                const convRoom = getConversationRoom(validPayload.conversationId);
-                socket.to(convRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageData);
+            // 2. Broadcast to active conversation room (for users currently viewing the chat)
+            const convRoom = getConversationRoom(validPayload.conversationId);
+            socket.to(convRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageBroadcastPayload as any);
+
+            // 3. Also emit directly to recipient's private user room (for users on other pages / tabs)
+            const recipientRoom = getUserRoom(validPayload.recipientId);
+            socket.to(recipientRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageBroadcastPayload as any);
+
+            // 4. If recipient is online, notify sender of successful delivery
+            if (isRecipientOnline) {
+                socket.emit(SOCKET_EVENTS.CHAT_DELIVERED, {
+                    conversationId: validPayload.conversationId,
+                    messageId: persistedMessage.id,
+                    recipientId: validPayload.recipientId,
+                });
             }
 
-            const recipientRoom = getUserRoom(validPayload.recipientId);
-            socket.to(recipientRoom).emit(SOCKET_EVENTS.CHAT_MESSAGE, messageData);
-
-            // 2. Persist in background (with skipSocketEmit to prevent double-emit)
-            if (validPayload.conversationId) {
-                try {
-                    const persistedMessage = await ChatService.sendMessage(validPayload.conversationId, user, {
-                        content: validPayload.content,
+            // 5. ACK sender with the real persisted database message and tempId reconciliation
+            if (callback && typeof callback === "function") {
+                callback({
+                    success: true,
+                    data: {
+                        ...persistedMessage,
                         tempId: validPayload.tempId,
-                        messageType: "TEXT",
-                        skipSocketEmit: true, // We already emitted above!
-                    });
-
-                    // 3. ACK with the fully persisted message so sender can reconcile
-                    if (callback && typeof callback === "function") {
-                        callback({ success: true, data: { ...persistedMessage, tempId: validPayload.tempId } });
-                    }
-                } catch (persistError: unknown) {
-                    const msg = persistError instanceof Error ? persistError.message : "Failed to persist";
-                    logger.error(`[Socket] Persistence error in chat:send: ${msg}`);
-                    if (callback && typeof callback === "function") {
-                        callback({ success: false, error: msg });
-                    }
-                }
-            } else {
-                if (callback && typeof callback === "function") {
-                    callback({ success: false, error: "Conversation ID missing" });
-                }
+                        status: deliveryStatus,
+                    },
+                });
             }
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : "Unknown error";
+            const msg = error instanceof Error ? error.message : "Internal server error";
             logger.error(`[Socket] Error handling chat:send: ${msg}`);
             if (callback && typeof callback === "function") {
-                callback({ success: false, error: "Internal server error" });
+                callback({ success: false, error: msg });
             }
         }
     });
@@ -296,11 +301,50 @@ export const registerSocketHandlers = (
             socket.join(callRoom);
             logger.info(`[Socket] User ${user.userId} joined call room ${callRoom}`);
 
+            // Broadcast to other participants in call room that this user has joined and is ready
+            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_USER_JOINED, {
+                callId: payload.callId,
+                userId: user.userId,
+                user: {
+                    id: user.userId,
+                    role: user.role,
+                    email: user.email,
+                },
+            });
+
             if (callback) callback({ success: true });
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
             logger.error(`[Socket] Error joining call room: ${msg}`);
             if (callback) callback({ success: false, error: "Internal server error" });
+        }
+    });
+
+    socket.on(SOCKET_EVENTS.CALL_MESSAGE, async (payload) => {
+        try {
+            if (!payload || !payload.callId || !payload.content) return;
+
+            const call = await CallService.verifyCallParticipant(payload.callId, user.userId);
+            if (!call) return;
+
+            const callRoom = getCallRoom(payload.callId);
+            const otherUserId = call.callerId === user.userId ? call.receiverId : call.callerId;
+
+            const messagePayload = {
+                callId: payload.callId,
+                senderId: user.userId,
+                senderName: user.email?.split("@")[0] || "User",
+                content: payload.content,
+                timestamp: new Date().toISOString(),
+                tempId: payload.tempId || Date.now().toString(),
+            };
+
+            // Broadcast to room and directly to recipient room
+            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_MESSAGE, messagePayload);
+            socket.to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_MESSAGE, messagePayload);
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            logger.error(`[Socket] Error handling call:message: ${msg}`);
         }
     });
 
@@ -404,11 +448,40 @@ export const registerSocketHandlers = (
         }
     });
 
-    // 7. WebRTC SDP & ICE Candidate Signaling (Relay Only)
+    // 7. WebRTC SDP, Readiness & ICE Candidate Signaling (Relay Only to Call Room)
+    socket.on(SOCKET_EVENTS.CALL_READY, async (payload: { callId: string; role?: string }) => {
+        try {
+            if (!payload || !payload.callId) return;
+            const { callId, role } = payload;
+            const call = await CallService.verifyCallParticipant(callId, user.userId);
+            if (!call) {
+                logger.warn(`[CALL][SOCKET] User ${user.userId} forbidden from sending call:ready for call ${callId}`);
+                socket.emit(SOCKET_EVENTS.ERROR, { code: "FORBIDDEN", message: "Not authorized for this call session" });
+                return;
+            }
+
+            const callRoom = getCallRoom(callId);
+            const otherUserId = call.callerId === user.userId ? call.receiverId : call.callerId;
+
+            const readyData = {
+                callId,
+                userId: user.userId,
+                role: role || user.role,
+            };
+
+            logger.info(`[CALL][SOCKET][RECV] event=call:ready callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
+            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_READY, readyData);
+        } catch (error: unknown) {
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            logger.error(`[CALL][SOCKET] Error handling call:ready: ${msg}`);
+        }
+    });
+
     socket.on(SOCKET_EVENTS.CALL_OFFER, async (payload: ICallOfferPayload) => {
         try {
             const parseResult = sdpOfferZodSchema.safeParse(payload);
             if (!parseResult.success) {
+                logger.warn(`[CALL][SOCKET] Invalid call:offer payload from user ${user.userId}`);
                 socket.emit(SOCKET_EVENTS.ERROR, { code: "VALIDATION_ERROR", message: "Invalid call offer payload" });
                 return;
             }
@@ -416,6 +489,7 @@ export const registerSocketHandlers = (
             const { callId, offer } = parseResult.data;
             const call = await CallService.verifyCallParticipant(callId, user.userId);
             if (!call) {
+                logger.warn(`[CALL][SOCKET] User ${user.userId} forbidden from sending offer for call ${callId}`);
                 socket.emit(SOCKET_EVENTS.ERROR, { code: "FORBIDDEN", message: "Not authorized for this call session" });
                 return;
             }
@@ -429,11 +503,11 @@ export const registerSocketHandlers = (
                 offer,
             };
 
+            logger.info(`[CALL][SOCKET][RECV] event=call:offer (type: ${offer.type}) callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
             socket.to(callRoom).emit(SOCKET_EVENTS.CALL_OFFER, offerData);
-            socket.to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_OFFER, offerData);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
-            logger.error(`[Socket] Error handling call:offer: ${msg}`);
+            logger.error(`[CALL][SOCKET] Error handling call:offer: ${msg}`);
         }
     });
 
@@ -441,6 +515,7 @@ export const registerSocketHandlers = (
         try {
             const parseResult = sdpAnswerZodSchema.safeParse(payload);
             if (!parseResult.success) {
+                logger.warn(`[CALL][SOCKET] Invalid call:answer payload from user ${user.userId}`);
                 socket.emit(SOCKET_EVENTS.ERROR, { code: "VALIDATION_ERROR", message: "Invalid call answer payload" });
                 return;
             }
@@ -448,6 +523,7 @@ export const registerSocketHandlers = (
             const { callId, answer } = parseResult.data;
             const call = await CallService.verifyCallParticipant(callId, user.userId);
             if (!call) {
+                logger.warn(`[CALL][SOCKET] User ${user.userId} forbidden from sending answer for call ${callId}`);
                 socket.emit(SOCKET_EVENTS.ERROR, { code: "FORBIDDEN", message: "Not authorized for this call session" });
                 return;
             }
@@ -461,11 +537,11 @@ export const registerSocketHandlers = (
                 answer,
             };
 
+            logger.info(`[CALL][SOCKET][RECV] event=call:answer (type: ${answer.type}) callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
             socket.to(callRoom).emit(SOCKET_EVENTS.CALL_ANSWER, answerData);
-            socket.to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_ANSWER, answerData);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
-            logger.error(`[Socket] Error handling call:answer: ${msg}`);
+            logger.error(`[CALL][SOCKET] Error handling call:answer: ${msg}`);
         }
     });
 
@@ -473,6 +549,7 @@ export const registerSocketHandlers = (
         try {
             const parseResult = iceCandidateZodSchema.safeParse(payload);
             if (!parseResult.success) {
+                logger.warn(`[CALL][SOCKET] Invalid call:ice-candidate payload from user ${user.userId}`);
                 socket.emit(SOCKET_EVENTS.ERROR, { code: "VALIDATION_ERROR", message: "Invalid ICE candidate payload" });
                 return;
             }
@@ -493,11 +570,11 @@ export const registerSocketHandlers = (
                 candidate,
             };
 
+            logger.info(`[CALL][SOCKET][RECV] event=call:ice-candidate callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
             socket.to(callRoom).emit(SOCKET_EVENTS.CALL_ICE_CANDIDATE, candidateData);
-            socket.to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_ICE_CANDIDATE, candidateData);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
-            logger.error(`[Socket] Error handling call:ice-candidate: ${msg}`);
+            logger.error(`[CALL][SOCKET] Error handling call:ice-candidate: ${msg}`);
         }
     });
 

@@ -12,7 +12,7 @@ import AppError from "../../errorHelpers/AppError";
 import { IRequestUser } from "../../interfaces/requestUser.interface";
 import { prisma } from "../../lib/prisma";
 import { SOCKET_EVENTS } from "../../socket/socket.events";
-import { getCallRoom } from "../../socket/socket.rooms";
+import { getCallRoom, getUserRoom } from "../../socket/socket.rooms";
 import { emitToUser, getSocketIO } from "../../socket/socket.server";
 import { logger } from "../../utils/logger";
 import { NotificationService } from "../notification/notification.service";
@@ -341,8 +341,7 @@ const acceptCall = async (callId: string, user: IRequestUser) => {
             answeredAt: now.toISOString(),
         };
 
-        io.to(callRoom).emit(SOCKET_EVENTS.CALL_ACCEPTED, acceptPayload);
-        emitToUser(call.callerId, SOCKET_EVENTS.CALL_ACCEPTED, acceptPayload);
+        io.to(callRoom).to(getUserRoom(call.callerId)).emit(SOCKET_EVENTS.CALL_ACCEPTED, acceptPayload);
     } catch {
         // Socket emission failure fallback
     }
@@ -392,8 +391,7 @@ const rejectCall = async (callId: string, user: IRequestUser, reason?: string) =
     try {
         const io = getSocketIO();
         const callRoom = getCallRoom(callId);
-        io.to(callRoom).emit(SOCKET_EVENTS.CALL_REJECTED, rejectPayload);
-        emitToUser(call.callerId, SOCKET_EVENTS.CALL_REJECTED, rejectPayload);
+        io.to(callRoom).to(getUserRoom(call.callerId)).emit(SOCKET_EVENTS.CALL_REJECTED, rejectPayload);
     } catch {
         // Safe fallback
     }
@@ -443,8 +441,7 @@ const cancelCall = async (callId: string, user: IRequestUser, reason?: string) =
     try {
         const io = getSocketIO();
         const callRoom = getCallRoom(callId);
-        io.to(callRoom).emit(SOCKET_EVENTS.CALL_CANCELED, cancelPayload);
-        emitToUser(call.receiverId, SOCKET_EVENTS.CALL_CANCELED, cancelPayload);
+        io.to(callRoom).to(getUserRoom(call.receiverId)).emit(SOCKET_EVENTS.CALL_CANCELED, cancelPayload);
     } catch {
         // Safe fallback
     }
@@ -504,9 +501,7 @@ const endCall = async (callId: string, user: IRequestUser, reason?: string) => {
     try {
         const io = getSocketIO();
         const callRoom = getCallRoom(callId);
-        io.to(callRoom).emit(SOCKET_EVENTS.CALL_ENDED, endPayload);
-        emitToUser(call.callerId, SOCKET_EVENTS.CALL_ENDED, endPayload);
-        emitToUser(call.receiverId, SOCKET_EVENTS.CALL_ENDED, endPayload);
+        io.to(callRoom).to(getUserRoom(call.callerId)).to(getUserRoom(call.receiverId)).emit(SOCKET_EVENTS.CALL_ENDED, endPayload);
     } catch {
         // Safe fallback
     }
@@ -636,10 +631,33 @@ const getMyCallHistory = async (user: IRequestUser, query: ICallFilterQuery) => 
 };
 
 const getCallById = async (callId: string, user: IRequestUser) => {
-    const call = await prisma.call.findFirst({
+    let call = await prisma.call.findFirst({
         where: { id: callId, isDeleted: false },
         include: defaultCallInclude,
     });
+
+    // Resilient fallback: If not found directly by call.id, check if callId is an appointment videoCallingId or appointment.id
+    if (!call) {
+        const appointment = await prisma.appointment.findFirst({
+            where: {
+                OR: [
+                    { videoCallingId: callId },
+                    { id: callId },
+                ],
+            },
+        });
+
+        if (appointment) {
+            call = await prisma.call.findFirst({
+                where: {
+                    appointmentId: appointment.id,
+                    isDeleted: false,
+                },
+                orderBy: { createdAt: "desc" },
+                include: defaultCallInclude,
+            });
+        }
+    }
 
     if (!call) {
         throw new AppError(status.NOT_FOUND, "Call record not found");
@@ -654,9 +672,30 @@ const getCallById = async (callId: string, user: IRequestUser) => {
 };
 
 const verifyCallParticipant = async (callId: string, userId: string) => {
-    const call = await prisma.call.findFirst({
+    let call = await prisma.call.findFirst({
         where: { id: callId, isDeleted: false },
     });
+
+    if (!call) {
+        const appointment = await prisma.appointment.findFirst({
+            where: {
+                OR: [
+                    { videoCallingId: callId },
+                    { id: callId },
+                ],
+            },
+        });
+
+        if (appointment) {
+            call = await prisma.call.findFirst({
+                where: {
+                    appointmentId: appointment.id,
+                    isDeleted: false,
+                },
+                orderBy: { createdAt: "desc" },
+            });
+        }
+    }
 
     if (!call) return null;
     if (call.callerId !== userId && call.receiverId !== userId) return null;

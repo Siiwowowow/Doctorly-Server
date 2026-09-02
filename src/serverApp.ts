@@ -25,12 +25,48 @@ app.set("views",path.resolve(process.cwd(), `src/app/templates`) )
 app.post("/webhook", express.raw({ type: "application/json" }), PaymentController.handleStripeWebhookEvent);
 app.post("/api/v1/payments/webhook", express.raw({ type: "application/json" }), PaymentController.handleStripeWebhookEvent);
 
+const normalizeUrl = (url?: string) => url ? url.replace(/\/+$/, "") : "";
+
+const configuredOrigins = [
+    normalizeUrl(envVars.FRONTEND_URL),
+    normalizeUrl(envVars.BETTER_AUTH_URL),
+    "https://doctorly-fontend.vercel.app",
+    "https://doctorly-frontend.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "http://localhost:5173",
+].filter(Boolean);
+
 app.use(cors({
-    origin : [envVars.FRONTEND_URL, envVars.BETTER_AUTH_URL, "http://localhost:3000", "http://localhost:5000"],
-    credentials : true,
-    methods : ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders : ["Content-Type", "Authorization"]
-}))
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+
+        const isAllowed = configuredOrigins.some(allowed => 
+            origin === allowed || origin.startsWith(allowed)
+        ) || origin.endsWith(".vercel.app") || origin.includes("localhost");
+
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            callback(null, true);
+        }
+    },
+    credentials: true,
+    maxAge: 86400, // Cache preflight requests for 24h to avoid redundant roundtrips
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "Cookie",
+        "x-better-auth-client",
+        "better-auth-csrf-token",
+        "X-Requested-With",
+        "Accept",
+        "Origin"
+    ],
+    exposedHeaders: ["Set-Cookie"]
+}));
 
 app.use("/api/auth", toNodeHandler(auth))
 

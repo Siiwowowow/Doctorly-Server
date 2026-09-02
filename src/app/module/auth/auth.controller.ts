@@ -80,31 +80,34 @@ const getNewToken = catchAsync(
         const refreshToken = req.cookies.refreshToken;
         const betterAuthSessionToken = req.cookies["better-auth.session_token"];
 
-        if (!refreshToken) {
-            throw new AppError(status.UNAUTHORIZED, "Refresh token is missing");
-        }
-        if (!betterAuthSessionToken) {
-            throw new AppError(status.UNAUTHORIZED, "Session token is missing");
+        if (!refreshToken || !betterAuthSessionToken) {
+            tokenUtils.clearAuthCookies(res);
+            throw new AppError(status.UNAUTHORIZED, "Refresh token or session token is missing");
         }
 
-        const result = await AuthService.getNewToken(refreshToken, betterAuthSessionToken);
-        const { accessToken, refreshToken: newRefreshToken, sessionToken, user } = result;
+        try {
+            const result = await AuthService.getNewToken(refreshToken, betterAuthSessionToken);
+            const { accessToken, refreshToken: newRefreshToken, sessionToken, user } = result;
 
-        tokenUtils.setAccessTokenCookie(res, accessToken);
-        tokenUtils.setRefreshTokenCookie(res, newRefreshToken);
-        tokenUtils.setBetterAuthSessionCookie(res, sessionToken);
+            tokenUtils.setAccessTokenCookie(res, accessToken);
+            tokenUtils.setRefreshTokenCookie(res, newRefreshToken);
+            tokenUtils.setBetterAuthSessionCookie(res, sessionToken);
 
-        sendResponse(res, {
-            httpStatusCode: status.OK,
-            success: true,
-            message: "New tokens generated successfully",
-            data: {
-                user,
-                accessToken,
-                refreshToken: newRefreshToken,
-                token: sessionToken,
-            },
-        });
+            sendResponse(res, {
+                httpStatusCode: status.OK,
+                success: true,
+                message: "New tokens generated successfully",
+                data: {
+                    user,
+                    accessToken,
+                    refreshToken: newRefreshToken,
+                    token: sessionToken,
+                },
+            });
+        } catch (error) {
+            tokenUtils.clearAuthCookies(res);
+            throw error;
+        }
     }
 );
 

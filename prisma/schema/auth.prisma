@@ -24,6 +24,8 @@ model User {
   doctorApplication        DoctorApplication?
 
   @@unique([email])
+  @@index([status, isDeleted])
+  @@index([role])
   @@map("user")
 }
 

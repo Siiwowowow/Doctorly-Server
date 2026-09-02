@@ -97,11 +97,13 @@ export interface ClientToServerEvents {
     "chat:read": (payload: { conversationId: string }, callback?: (status: { success: boolean; error?: string }) => void) => void;
     "call:join": (payload: { callId: string }, callback?: (status: { success: boolean; error?: string }) => void) => void;
     "call:leave": (payload: { callId: string }) => void;
+    "call:message": (payload: { callId: string; content: string; tempId?: string }) => void;
     "call:initiate": (payload: ICallInitiateSocketPayload, callback?: (status: { success: boolean; data?: unknown; error?: string }) => void) => void;
     "call:accept": (payload: { callId: string }, callback?: (status: { success: boolean; data?: unknown; error?: string }) => void) => void;
     "call:reject": (payload: ICallSignalPayload, callback?: (status: { success: boolean; error?: string }) => void) => void;
     "call:cancel": (payload: ICallSignalPayload, callback?: (status: { success: boolean; error?: string }) => void) => void;
     "call:end": (payload: ICallSignalPayload, callback?: (status: { success: boolean; error?: string }) => void) => void;
+    "call:ready": (payload: { callId: string; role?: string }) => void;
     "call:offer": (payload: ICallOfferPayload) => void;
     "call:answer": (payload: ICallAnswerPayload) => void;
     "call:ice-candidate": (payload: ICallIceCandidatePayload) => void;
@@ -112,7 +114,8 @@ export interface ServerToClientEvents {
     "notification:new": (notification: INotificationPayload) => void;
     "presence:online": (payload: IPresenceStatusPayload) => void;
     "presence:offline": (payload: IPresenceStatusPayload) => void;
-    "chat:message": (payload: { id?: string; senderId: string; content: string; conversationId?: string; tempId?: string; messageType?: string; status?: string; createdAt?: string; updatedAt?: string; timestamp?: string }) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "chat:message": (payload: any) => void;
     "chat:typing": (payload: { senderId: string; conversationId?: string }) => void;
     "chat:stop-typing": (payload: { senderId: string; conversationId?: string }) => void;
     "chat:read": (payload: { conversationId: string; readerId: string; readAt: string }) => void;
@@ -122,13 +125,23 @@ export interface ServerToClientEvents {
     "call:accepted": (payload: { callId: string; calleeId: string; appointmentId?: string | null; answeredAt: string }) => void;
     "call:rejected": (payload: { callId: string; calleeId: string; appointmentId?: string | null; reason?: string | null }) => void;
     "call:busy": (payload: { callId?: string; receiverId: string; reason?: string }) => void;
+    "call:ready": (payload: { callId: string; userId: string; role?: string }) => void;
+    "call:user-joined": (payload: { callId: string; userId: string; user?: unknown }) => void;
+    "call:message": (payload: { callId: string; senderId: string; senderName?: string; content: string; timestamp: string; tempId?: string }) => void;
     "call:offer": (payload: { callId: string; senderId: string; offer: { type: string; sdp: string } }) => void;
     "call:answer": (payload: { callId: string; senderId: string; answer: { type: string; sdp: string } }) => void;
     "call:ice-candidate": (payload: { callId: string; senderId: string; candidate: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null } }) => void;
     "call:ended": (payload: { callId: string; senderId?: string; appointmentId?: string | null; duration?: number | null; reason?: string | null }) => void;
     "call:canceled": (payload: { callId: string; callerId: string; appointmentId?: string | null; reason?: string | null }) => void;
     "call:missed": (payload: { callId: string; callerId: string; receiverId: string; appointmentId?: string | null; reason?: string }) => void;
-    "call:failed": (payload: { callId?: string; reason: string }) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "appointment:created": (payload: any) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "appointment:updated": (payload: any) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "appointment:canceled": (payload: any) => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    "schedule:updated": (payload: any) => void;
     "error": (error: { code: string; message: string }) => void;
 }
 

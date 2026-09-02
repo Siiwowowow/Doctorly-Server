@@ -5,6 +5,7 @@ import AppError from "../../errorHelpers/AppError";
 import { IRequestUser } from "../../interfaces/requestUser.interface";
 import { auth } from "../../lib/auth";
 import { prisma } from "../../lib/prisma";
+import { memoryCache } from "../../utils/cache";
 import { ICreateAdminPayload, ICreateDoctorPayload } from "./user.interface";
 
 const createDoctor = async (payload: ICreateDoctorPayload) => {
@@ -123,6 +124,7 @@ const createDoctor = async (payload: ICreateDoctorPayload) => {
             return doctor;
         });
 
+        memoryCache.invalidateTag("doctors");
         return result;
     } catch (error) {
         // Rollback user creation on failure
@@ -206,4 +208,4 @@ const createAdmin = async (payload: ICreateAdminPayload, requestingUser?: IReque
 export const UserService = {
     createDoctor,
     createAdmin,
-};
+};

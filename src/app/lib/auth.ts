@@ -66,57 +66,57 @@ export const auth = betterAuth({
         bearer(),
         emailOTP({
             overrideDefaultEmailVerification: true,
-            async sendVerificationOTP({email, otp, type}) {
-                if(type === "email-verification"){
-                  const user = await prisma.user.findUnique({
-                    where : {
-                        email,
-                    }
-                  })
-
-                   if(!user){
-                    logger.error(`User with email ${email} not found. Cannot send verification OTP.`);
-                    return;
-                   }
-
-                   if(user && user.role === Role.SUPER_ADMIN){
-                    logger.info(`User with email ${email} is a super admin. Skipping sending verification OTP.`);
-                    return;
-                   }
-                  
-                    if (user && !user.emailVerified){
-                    sendEmail({
-                        to : email,
-                        subject : "Verify your email",
-                        templateName : "otp",
-                        templateData :{
-                            name : user.name,
-                            otp,
-                        }
-                    })
-                  }
-                }else if(type === "forget-password"){
+            async sendVerificationOTP({ email, otp, type }) {
+                try {
                     const user = await prisma.user.findUnique({
-                        where : {
-                            email,
-                        }
-                    })
+                        where: { email }
+                    }).catch(() => null);
 
-                    if(user){
-                        sendEmail({
-                            to : email,
-                            subject : "Password Reset OTP",
-                            templateName : "otp",
-                            templateData :{
-                                name : user.name,
-                                otp,
-                            }
-                        })
+                    if (user && user.role === Role.SUPER_ADMIN) {
+                        logger.info(`User with email ${email} is a super admin. Skipping sending verification OTP.`);
+                        return;
                     }
+
+                    if (type === "email-verification") {
+                        if (user && user.emailVerified) {
+                            logger.info(`User with email ${email} is already verified. Skipping OTP.`);
+                            return;
+                        }
+
+                        await sendEmail({
+                            to: email,
+                            subject: "Verify Your Email Address - Doctorly Healthcare",
+                            templateName: "otp",
+                            templateData: {
+                                name: user?.name || "Valued User",
+                                otp,
+                                type: "email-verification",
+                                actionText: "Verify Your Email",
+                                expiryMinutes: 2,
+                            }
+                        });
+                    } else if (type === "forget-password") {
+                        await sendEmail({
+                            to: email,
+                            subject: "Password Reset OTP - Doctorly Healthcare",
+                            templateName: "otp",
+                            templateData: {
+                                name: user?.name || "Valued User",
+                                otp,
+                                type: "forget-password",
+                                actionText: "Reset Your Password",
+                                expiryMinutes: 2,
+                            }
+                        });
+                    }
+                } catch (error: unknown) {
+                    const err = error as Error;
+                    logger.error(`Failed to send ${type} OTP to ${email}:`, err?.message || String(error));
+                    throw error;
                 }
             },
-            expiresIn : 2 * 60, // 2 minutes in seconds
-            otpLength : 6,
+            expiresIn: 2 * 60, // 2 minutes in seconds
+            otpLength: 6,
         })
     ],
 
@@ -129,7 +129,16 @@ export const auth = betterAuth({
         }
     },
 
-    trustedOrigins: [process.env.BETTER_AUTH_URL || "http://localhost:5000", envVars.FRONTEND_URL, "http://localhost:3000", "http://localhost:5000"],
+    trustedOrigins: [
+        envVars.FRONTEND_URL ? envVars.FRONTEND_URL.replace(/\/+$/, "") : "",
+        envVars.BETTER_AUTH_URL ? envVars.BETTER_AUTH_URL.replace(/\/+$/, "") : "",
+        process.env.BETTER_AUTH_URL ? process.env.BETTER_AUTH_URL.replace(/\/+$/, "") : "",
+        "https://doctorly-fontend.vercel.app",
+        "https://doctorly-frontend.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "http://localhost:5173",
+    ].filter(Boolean),
 
     advanced: {
         useSecureCookies : isProduction,

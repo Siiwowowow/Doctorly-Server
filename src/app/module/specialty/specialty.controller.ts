@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import status from "http-status";
 import { catchAsync } from "../../shared/catchAsync";
 import { sendResponse } from "../../shared/sendResponse";
+import { memoryCache } from "../../utils/cache";
 import { SpecialtyService } from "./specialty.service";
 
 const createSpecialty = catchAsync(
@@ -11,6 +12,9 @@ const createSpecialty = catchAsync(
             icon: req.file?.path,
         };
         const result = await SpecialtyService.createSpecialty(payload);
+        memoryCache.invalidateTag("specialties");
+        memoryCache.invalidateTag("doctors");
+
         sendResponse(res, {
             httpStatusCode: status.CREATED,
             success: true,
@@ -22,7 +26,13 @@ const createSpecialty = catchAsync(
 
 const getAllSpecialties = catchAsync(
     async (req: Request, res: Response) => {
-        const result = await SpecialtyService.getAllSpecialties();
+        const result = await memoryCache.getOrSet(
+            "specialties:all",
+            300, // 5 minutes TTL
+            () => SpecialtyService.getAllSpecialties(),
+            ["specialties"]
+        );
+
         sendResponse(res, {
             httpStatusCode: status.OK,
             success: true,
@@ -36,6 +46,9 @@ const deleteSpecialty = catchAsync(
     async (req: Request, res: Response) => {
         const { id } = req.params;
         const result = await SpecialtyService.deleteSpecialty(id as string);
+        memoryCache.invalidateTag("specialties");
+        memoryCache.invalidateTag("doctors");
+
         sendResponse(res, {
             httpStatusCode: status.OK,
             success: true,

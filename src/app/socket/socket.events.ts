@@ -32,6 +32,7 @@ export const SOCKET_EVENTS = {
     CALL_REJECT: "call:reject",
     CALL_REJECTED: "call:rejected",
     CALL_BUSY: "call:busy",
+    CALL_READY: "call:ready",
     CALL_OFFER: "call:offer",
     CALL_ANSWER: "call:answer",
     CALL_ICE_CANDIDATE: "call:ice-candidate",
@@ -43,6 +44,14 @@ export const SOCKET_EVENTS = {
     CALL_FAILED: "call:failed",
     CALL_JOIN: "call:join",
     CALL_LEAVE: "call:leave",
+    CALL_USER_JOINED: "call:user-joined",
+    CALL_MESSAGE: "call:message",
+
+    // Appointments & Schedules
+    APPOINTMENT_CREATED: "appointment:created",
+    APPOINTMENT_UPDATED: "appointment:updated",
+    APPOINTMENT_CANCELED: "appointment:canceled",
+    SCHEDULE_UPDATED: "schedule:updated",
 
     // Error
     ERROR: "error",

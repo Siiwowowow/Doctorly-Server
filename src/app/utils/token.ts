@@ -63,10 +63,23 @@ const setBetterAuthSessionCookie = (res: Response, token: string) => {
 
 
 
+const clearAuthCookies = (res: Response) => {
+    const cookieOptions = {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? ("none" as const) : ("lax" as const),
+        path: "/",
+    };
+    CookieUtils.clearCookie(res, "accessToken", cookieOptions);
+    CookieUtils.clearCookie(res, "refreshToken", cookieOptions);
+    CookieUtils.clearCookie(res, "better-auth.session_token", cookieOptions);
+};
+
 export const tokenUtils = {
     getAccessToken,
     getRefreshToken,
     setAccessTokenCookie,
     setRefreshTokenCookie,
     setBetterAuthSessionCookie,
+    clearAuthCookies,
 }

@@ -135,39 +135,41 @@ const loginUser = async (payload: ILoginUserPayload) => {
 
 }
 
-const getMe = async (user : IRequestUser) => {
+const getMe = async (user: IRequestUser) => {
     const isUserExists = await prisma.user.findUnique({
-        where : {
-            id : user.userId,
+        where: {
+            id: user.userId,
         },
-        include : {
-            patient : {
-                include : {
-                    appointments : true,
-                    reviews : true,
-                    prescriptions : true,
-                    medicalReports : true,
-                    patientHealthData : true,
-                }
+        include: {
+            patient: {
+                include: {
+                    patientHealthData: true,
+                },
             },
-            doctor : {
-                include : {
-                    specialties : true,
-                    appointments : true,
-                    reviews : true,
-                    prescriptions : true,
-                }
+            doctor: {
+                include: {
+                    specialties: {
+                        where: {
+                            specialty: {
+                                isDeleted: false,
+                            },
+                        },
+                        include: {
+                            specialty: true,
+                        },
+                    },
+                },
             },
-            admin : true,
-        }
-    })
+            admin: true,
+        },
+    });
 
     if (!isUserExists) {
         throw new AppError(status.NOT_FOUND, "User not found");
     }
 
     return isUserExists;
-}
+};
 
 const getNewToken = async (refreshToken: string, sessionToken: string) => {
     if (!sessionToken) {

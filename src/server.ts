@@ -1,7 +1,7 @@
-import express from "express";
 import http from "http";
 import app from "./serverApp";
 import { envVars } from "./app/config/env";
+import { warmDatabaseConnection } from "./app/lib/prisma";
 import { initSocketIO } from "./app/socket";
 import { logger } from "./app/utils/logger";
 import { seedSuperAdmin } from "./app/utils/seed";
@@ -17,10 +17,11 @@ const bootstrap = async () => {
             logger.info(`Server & Socket.IO are running on http://localhost:${envVars.PORT}`);
         });
 
-        // Run seedSuperAdmin non-blockingly so server start is instant
+        // Run seedSuperAdmin and warm connection pool non-blockingly so server start is instant
         seedSuperAdmin().catch((err) => {
             logger.error("Error during initial super admin seeding:", err);
         });
+        warmDatabaseConnection().catch(() => {});
     } catch (error) {
         logger.error("Failed to start server:", error);
     }

@@ -32,9 +32,10 @@ export const sdpAnswerZodSchema = z.object({
 export const iceCandidateZodSchema = z.object({
     callId: z.string().min(1, "Call ID is required"),
     candidate: z.object({
-        candidate: z.string().min(1, "Candidate string is required"),
+        candidate: z.string().optional().default(""),
         sdpMid: z.string().nullable().optional(),
         sdpMLineIndex: z.number().nullable().optional(),
+        usernameFragment: z.string().nullable().optional(),
     }),
 });
 

@@ -67,24 +67,6 @@ const getMyProfile = async (user: IRequestUser) => {
                 },
             },
             patientHealthData: true,
-            appointments: {
-                include: {
-                    doctor: {
-                        select: {
-                            id: true,
-                            name: true,
-                            email: true,
-                            profilePhoto: true,
-                            designation: true,
-                            qualification: true,
-                        },
-                    },
-                    schedule: true,
-                },
-            },
-            prescriptions: true,
-            medicalReports: true,
-            reviews: true,
         },
     });
 
@@ -116,24 +98,6 @@ const getMyProfile = async (user: IRequestUser) => {
                         },
                     },
                     patientHealthData: true,
-                    appointments: {
-                        include: {
-                            doctor: {
-                                select: {
-                                    id: true,
-                                    name: true,
-                                    email: true,
-                                    profilePhoto: true,
-                                    designation: true,
-                                    qualification: true,
-                                },
-                            },
-                            schedule: true,
-                        },
-                    },
-                    prescriptions: true,
-                    medicalReports: true,
-                    reviews: true,
                 },
             });
         }
@@ -170,24 +134,6 @@ const getPatientById = async (id: string, user: IRequestUser) => {
                 },
             },
             patientHealthData: true,
-            appointments: {
-                include: {
-                    doctor: {
-                        select: {
-                            id: true,
-                            name: true,
-                            email: true,
-                            profilePhoto: true,
-                            designation: true,
-                            qualification: true,
-                        },
-                    },
-                    schedule: true,
-                },
-            },
-            prescriptions: true,
-            medicalReports: true,
-            reviews: true,
         },
     });
 

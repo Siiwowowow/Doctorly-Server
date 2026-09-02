@@ -8,6 +8,8 @@ import { prisma } from "../lib/prisma";
 import { CookieUtils } from "../utils/cookie";
 import { jwtUtils } from "../utils/jwt";
 
+import { tokenUtils } from "../utils/token";
+
 export const checkAuth = (...authRoles: Role[]) => async (req: Request, res: Response, next: NextFunction) => {
     try {
         // 1. Session Token Extraction & Verification (User/Session Identity)
@@ -30,6 +32,7 @@ export const checkAuth = (...authRoles: Role[]) => async (req: Request, res: Res
         });
 
         if (!session || !session.user) {
+            tokenUtils.clearAuthCookies(res);
             throw new AppError(status.UNAUTHORIZED, "Unauthorized access! Session is invalid or expired.");
         }
 

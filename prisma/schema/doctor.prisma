@@ -36,5 +36,8 @@ model Doctor {
 
   @@index([email], name: "idx_doctor_email")
   @@index([isDeleted], name: "idx_doctor_isDeleted")
+  @@index([isDeleted, createdAt])
+  @@index([isDeleted, averageRating])
+  @@index([isDeleted, appointmentFee])
   @@map("doctor")
 }

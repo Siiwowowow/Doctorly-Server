@@ -76,25 +76,6 @@ const getAllDoctors = async (query: IQueryParams) => {
                     specialty: true,
                 },
             },
-            doctorSchedules: {
-                where: {
-                    isBooked: false,
-                },
-                include: {
-                    schedule: true,
-                },
-            },
-            reviews: {
-                include: {
-                    patient: {
-                        select: {
-                            id: true,
-                            name: true,
-                            profilePhoto: true,
-                        },
-                    },
-                },
-            },
         })
         .dynamicInclude(doctorIncludeConfig)
         .paginate()

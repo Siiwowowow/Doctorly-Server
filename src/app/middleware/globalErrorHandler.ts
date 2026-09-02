@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { NextFunction, Request, Response } from "express";
 import status from "http-status";
@@ -10,10 +11,12 @@ import { TErrorResponse, TErrorSources } from "../interfaces/error.interface";
 
 
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const globalErrorHandler = async (err: any, req: Request, res: Response, next: NextFunction) => {
     if (envVars.NODE_ENV === 'development') {
-        console.log("Error from Global Error Handler", err);
+        const statusCode = err?.statusCode || (err instanceof z.ZodError ? 400 : 500);
+        if (statusCode >= 500) {
+            console.error("Internal Server Error from Global Error Handler:", err);
+        }
     }
 
     if(req.file){
