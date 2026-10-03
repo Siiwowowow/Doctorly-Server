@@ -49,6 +49,17 @@ export const appointmentIncludeConfig: Partial<Record<keyof Prisma.AppointmentIn
             email: true,
             profilePhoto: true,
             contactNumber: true,
+            address: true,
+            emergencyContactName: true,
+            emergencyContactNumber: true,
+            emergencyContactRelationship: true,
+            patientHealthData: {
+                select: {
+                    bloodGroup: true,
+                    gender: true,
+                    dateOfBirth: true,
+                },
+            },
             user: {
                 select: {
                     id: true,

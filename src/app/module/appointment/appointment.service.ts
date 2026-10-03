@@ -336,9 +336,14 @@ const getAppointmentById = async (id: string, user: IRequestUser) => {
                 profilePhoto: true,
                 contactNumber: true,
                 address: true,
+                emergencyContactName: true,
+                emergencyContactNumber: true,
+                emergencyContactRelationship: true,
                 patientHealthData: {
                     select: {
                         bloodGroup: true,
+                        gender: true,
+                        dateOfBirth: true,
                     },
                 },
                 user: {

@@ -35,6 +35,13 @@ export const prescriptionIncludeConfig: Partial<Record<keyof Prisma.Prescription
             profilePhoto: true,
             contactNumber: true,
             address: true,
+            patientHealthData: {
+                select: {
+                    bloodGroup: true,
+                    gender: true,
+                    dateOfBirth: true,
+                },
+            },
             user: {
                 select: {
                     id: true,
