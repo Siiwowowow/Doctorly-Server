@@ -17,11 +17,15 @@ interface EnvConfig {
     BETTER_AUTH_SESSION_TOKEN_EXPIRES_IN: string;
     BETTER_AUTH_SESSION_TOKEN_UPDATE_AGE: string;
     EMAIL_SENDER:{
+        PROVIDER: string;
         SMTP_USER: string;
         SMTP_PASS: string;
         SMTP_HOST: string;
         SMTP_PORT: string;
         SMTP_FROM: string;
+        RESEND_API_KEY?: string;
+        VERCEL_MAIL_API_URL?: string;
+        MAIL_SERVICE_SECRET?: string;
     }
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
@@ -54,10 +58,6 @@ const loadEnvVariables = (): EnvConfig => {
         'REFRESH_TOKEN_EXPIRES_IN',
         'BETTER_AUTH_SESSION_TOKEN_EXPIRES_IN',
         'BETTER_AUTH_SESSION_TOKEN_UPDATE_AGE',
-        'EMAIL_SENDER_SMTP_USER',
-        'EMAIL_SENDER_SMTP_PASS',
-        'EMAIL_SENDER_SMTP_HOST',
-        'EMAIL_SENDER_SMTP_PORT',
         'EMAIL_SENDER_SMTP_FROM',
         'FRONTEND_URL',
         'CLOUDINARY_CLOUD_NAME',
@@ -68,6 +68,28 @@ const loadEnvVariables = (): EnvConfig => {
         'SUPER_ADMIN_EMAIL',
         'SUPER_ADMIN_PASSWORD',
     ];
+
+    // This project runs its main API on Render and its SMTP relay on Vercel.
+    // Render blocks SMTP on free instances, so always route mail through Vercel there.
+    const emailProvider = (process.env.RENDER === 'true'
+        ? 'vercel'
+        : process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? 'resend' : 'smtp')).toLowerCase();
+
+    if (emailProvider === 'smtp') {
+        requireEnvVariable.push(
+            'EMAIL_SENDER_SMTP_USER',
+            'EMAIL_SENDER_SMTP_PASS',
+            'EMAIL_SENDER_SMTP_HOST',
+            'EMAIL_SENDER_SMTP_PORT',
+        );
+    } else if (emailProvider === 'resend') {
+        requireEnvVariable.push('RESEND_API_KEY');
+    } else if (emailProvider === 'vercel') {
+        // VERCEL_MAIL_API_URL has a project-specific default; BETTER_AUTH_SECRET
+        // is used when a dedicated MAIL_SERVICE_SECRET is not configured.
+    } else {
+        throw new AppError(status.INTERNAL_SERVER_ERROR, `Unsupported EMAIL_PROVIDER: ${emailProvider}`);
+    }
 
     requireEnvVariable.forEach((variable) => {
         if (!process.env[variable]) {
@@ -94,11 +116,15 @@ const loadEnvVariables = (): EnvConfig => {
         BETTER_AUTH_SESSION_TOKEN_EXPIRES_IN: process.env.BETTER_AUTH_SESSION_TOKEN_EXPIRES_IN as string,
         BETTER_AUTH_SESSION_TOKEN_UPDATE_AGE: process.env.BETTER_AUTH_SESSION_TOKEN_UPDATE_AGE as string,
         EMAIL_SENDER: {
+            PROVIDER: emailProvider,
             SMTP_USER: process.env.EMAIL_SENDER_SMTP_USER as string,
             SMTP_PASS: process.env.EMAIL_SENDER_SMTP_PASS as string,
             SMTP_HOST: process.env.EMAIL_SENDER_SMTP_HOST as string,
             SMTP_PORT: process.env.EMAIL_SENDER_SMTP_PORT as string,
             SMTP_FROM: process.env.EMAIL_SENDER_SMTP_FROM as string,
+            RESEND_API_KEY: process.env.RESEND_API_KEY,
+            VERCEL_MAIL_API_URL: process.env.VERCEL_MAIL_API_URL || 'https://doctorly-server-zeta.vercel.app/api/internal/send-email',
+            MAIL_SERVICE_SECRET: process.env.MAIL_SERVICE_SECRET || process.env.BETTER_AUTH_SECRET,
         },
         GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
         GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,

@@ -3,6 +3,7 @@ import { toNodeHandler } from "better-auth/node";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { Application, Request, Response } from "express";
+import { timingSafeEqual } from "crypto";
 import cron from "node-cron";
 import path from "path";
 import qs from "qs";
@@ -15,6 +16,7 @@ import { PaymentController } from "./app/module/payment/payment.controller";
 import { IndexRoutes } from "./app/routes";
 
 import { logger } from "./app/utils/logger";
+import { sendHtmlEmailViaSmtp } from "./app/utils/email";
 
 const app: Application = express();
 app.set("query parser", (str : string) => qs.parse(str));
@@ -76,6 +78,58 @@ app.use(express.urlencoded({ extended: true }));
 // Middleware to parse JSON bodies
 app.use(express.json());
 app.use(cookieParser())
+
+// Private SMTP relay used by the Render backend. Deploy this same codebase to
+// Vercel with EMAIL_PROVIDER=smtp; never call this endpoint from the browser.
+app.post("/api/internal/send-email", async (req: Request, res: Response) => {
+    try {
+        if (envVars.EMAIL_SENDER.PROVIDER !== "smtp") {
+            res.status(503).json({ success: false, message: "Mail relay is disabled on this deployment" });
+            return;
+        }
+
+        const expectedSecret = envVars.EMAIL_SENDER.MAIL_SERVICE_SECRET || "";
+        const suppliedSecret = req.header("x-mail-service-secret") || "";
+        const expectedBuffer = Buffer.from(expectedSecret);
+        const suppliedBuffer = Buffer.from(suppliedSecret);
+        const isAuthorized = expectedBuffer.length > 0
+            && expectedBuffer.length === suppliedBuffer.length
+            && timingSafeEqual(expectedBuffer, suppliedBuffer);
+
+        if (!isAuthorized) {
+            res.status(401).json({ success: false, message: "Unauthorized" });
+            return;
+        }
+
+        const { to, subject, html, attachments } = req.body as {
+            to?: string;
+            subject?: string;
+            html?: string;
+            attachments?: Array<{ filename: string; content: string; contentType: string }>;
+        };
+
+        if (!to || !subject || !html) {
+            res.status(400).json({ success: false, message: "to, subject and html are required" });
+            return;
+        }
+
+        const info = await sendHtmlEmailViaSmtp({
+            to,
+            subject,
+            html,
+            attachments: attachments?.map((attachment) => ({
+                filename: attachment.filename,
+                content: Buffer.from(attachment.content, "base64"),
+                contentType: attachment.contentType,
+            })),
+        });
+
+        res.status(200).json({ success: true, messageId: info.messageId });
+    } catch (error: any) {
+        logger.error("Vercel mail relay error:", error?.message || error);
+        res.status(502).json({ success: false, message: "Unable to send email" });
+    }
+});
 
 // Periodically auto-remove unpaid appointments older than 12 hours
 cron.schedule("*/30 * * * *", async () => {

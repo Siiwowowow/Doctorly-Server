@@ -10,8 +10,8 @@ import { logger } from "./logger";
 
 const smtpPort = Number(envVars.EMAIL_SENDER.SMTP_PORT) || 465;
 const smtpUser = envVars.EMAIL_SENDER.SMTP_USER?.trim();
-// Strip potential quotes or unexpected whitespace from Google app password
-const smtpPass = envVars.EMAIL_SENDER.SMTP_PASS?.replace(/['"]/g, "").trim();
+// Google displays app passwords in groups; SMTP expects the value without spaces.
+const smtpPass = envVars.EMAIL_SENDER.SMTP_PASS?.replace(/['"\s]/g, "");
 
 const transporter = nodemailer.createTransport({
     host: envVars.EMAIL_SENDER.SMTP_HOST || "smtp.gmail.com",
@@ -140,6 +140,13 @@ interface SendEmailOptions {
     }[];
 }
 
+interface SendHtmlEmailOptions {
+    to: string;
+    subject: string;
+    html: string;
+    attachments?: SendEmailOptions["attachments"];
+}
+
 const renderEmailHtml = async (templateName: string, templateData: Record<string, any>): Promise<string> => {
     // Try multiple possible paths for EJS templates (local development vs production bundle)
     const possiblePaths = [
@@ -179,17 +186,69 @@ export const sendEmail = async ({ subject, templateData, templateName, to, attac
     try {
         const html = await renderEmailHtml(templateName, templateData);
 
-        const info = await transporter.sendMail({
-            from: getFromAddress(),
-            to: to,
-            subject: subject,
-            html: html,
-            attachments: attachments?.map((attachment) => ({
-                filename: attachment.filename,
-                content: attachment.content,
-                contentType: attachment.contentType,
-            }))
-        });
+        if (envVars.EMAIL_SENDER.PROVIDER === "vercel") {
+            const response = await fetch(envVars.EMAIL_SENDER.VERCEL_MAIL_API_URL as string, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-mail-service-secret": envVars.EMAIL_SENDER.MAIL_SERVICE_SECRET as string,
+                },
+                body: JSON.stringify({
+                    to,
+                    subject,
+                    html,
+                    attachments: attachments?.map((attachment) => ({
+                        filename: attachment.filename,
+                        content: Buffer.isBuffer(attachment.content)
+                            ? attachment.content.toString("base64")
+                            : Buffer.from(attachment.content).toString("base64"),
+                        contentType: attachment.contentType,
+                    })),
+                }),
+                signal: AbortSignal.timeout(25000),
+            });
+
+            const responseBody = await response.json().catch(() => ({})) as { message?: string; messageId?: string };
+            if (!response.ok) {
+                throw new Error(responseBody.message || `Vercel mail service returned HTTP ${response.status}`);
+            }
+
+            logger.info(`Email sent successfully to ${to} via Vercel mail service (MessageId: ${responseBody.messageId || "unknown"})`);
+            return responseBody;
+        }
+
+        if (envVars.EMAIL_SENDER.PROVIDER === "resend") {
+            const response = await fetch("https://api.resend.com/emails", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${envVars.EMAIL_SENDER.RESEND_API_KEY}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    from: getFromAddress(),
+                    to: [to],
+                    subject,
+                    html,
+                    attachments: attachments?.map((attachment) => ({
+                        filename: attachment.filename,
+                        content: Buffer.isBuffer(attachment.content)
+                            ? attachment.content.toString("base64")
+                            : Buffer.from(attachment.content).toString("base64"),
+                    })),
+                }),
+                signal: AbortSignal.timeout(20000),
+            });
+
+            const responseBody = await response.json().catch(() => ({})) as { id?: string; message?: string; name?: string };
+            if (!response.ok) {
+                throw new Error(responseBody.message || responseBody.name || `Resend returned HTTP ${response.status}`);
+            }
+
+            logger.info(`Email sent successfully to ${to} via Resend (MessageId: ${responseBody.id || "unknown"})`);
+            return responseBody;
+        }
+
+        const info = await sendHtmlEmailViaSmtp({ to, subject, html, attachments });
 
         logger.info(`Email sent successfully to ${to} (MessageId: ${info.messageId})`);
         return info;
@@ -197,4 +256,18 @@ export const sendEmail = async ({ subject, templateData, templateName, to, attac
         logger.error(`Email Sending Error for recipient ${to}:`, error?.message || error);
         throw new AppError(status.INTERNAL_SERVER_ERROR, `Failed to send email: ${error?.message || "Unknown error"}`);
     }
+};
+
+export const sendHtmlEmailViaSmtp = async ({ to, subject, html, attachments }: SendHtmlEmailOptions) => {
+    return transporter.sendMail({
+        from: getFromAddress(),
+        to,
+        subject,
+        html,
+        attachments: attachments?.map((attachment) => ({
+            filename: attachment.filename,
+            content: attachment.content,
+            contentType: attachment.contentType,
+        })),
+    });
 };
