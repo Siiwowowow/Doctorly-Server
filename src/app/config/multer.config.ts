@@ -37,3 +37,25 @@ const storage = new CloudinaryStorage({
 })
 
 export const multerUpload = multer({storage})
+
+const CHAT_FILE_MAX_SIZE = 3 * 1024 * 1024;
+const CHAT_ALLOWED_MIME_TYPES = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+]);
+
+export const chatFileUpload = multer({
+    storage,
+    limits: { fileSize: CHAT_FILE_MAX_SIZE, files: 1 },
+    fileFilter: (_req, file, callback) => {
+        if (!CHAT_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+            callback(new Error("Only PDF, DOC, DOCX, JPG, PNG, and WebP files are allowed"));
+            return;
+        }
+        callback(null, true);
+    },
+});

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { Role } from "../../../generated/prisma/enums";
-import { multerUpload } from "../../config/multer.config";
+import { chatFileUpload } from "../../config/multer.config";
 import { checkAuth } from "../../middleware/checkAuth";
 import { validateRequest } from "../../middleware/validateRequest";
 import { ChatController } from "./chat.controller";
@@ -48,7 +48,7 @@ router.get(
 router.post(
     "/conversations/:conversationId/messages",
     checkAuth(Role.PATIENT, Role.DOCTOR),
-    multerUpload.single("file"),
+    chatFileUpload.single("file"),
     validateRequest(ChatValidation.sendMessageZodSchema),
     ChatController.sendMessage
 );
