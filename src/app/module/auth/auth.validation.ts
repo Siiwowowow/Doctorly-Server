@@ -3,17 +3,32 @@ import z from "zod";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const registerPatientZodSchema = z.preprocess((val: any) => {
     if (val && typeof val === "object") {
-        if (!val.contactNumber && (val.phone || val.phoneNumber)) {
-            val.contactNumber = val.phone || val.phoneNumber;
+        const rawPhone = val.contactNumber || val.phone || val.phoneNumber;
+        if (rawPhone !== undefined && rawPhone !== null) {
+            // Strip out spaces, dashes, parentheses but preserve digits and plus
+            const cleaned = String(rawPhone).trim().replace(/[\s\-()]/g, "");
+            val.contactNumber = cleaned;
+            val.phoneNumber = cleaned;
+        }
+        if (val.name && typeof val.name === "string") {
+            val.name = val.name.trim();
+        }
+        if (val.email && typeof val.email === "string") {
+            val.email = val.email.trim().toLowerCase();
         }
     }
     return val;
 }, z.object({
     name: z.string({ message: "Name is required" }).min(2, { message: "Name must be at least 2 characters" }).max(50, { message: "Name must be at most 50 characters" }),
     email: z.string({ message: "Email is required" }).email({ message: "Invalid email address" }),
-    password: z.string({ message: "Password is required" }).min(6, { message: "Password must be at least 6 characters" }).max(30, { message: "Password must be at most 30 characters" }),
-    contactNumber: z.string({ message: "Contact number is required" }).min(11, { message: "Contact number must be at least 11 characters" }).max(15, { message: "Contact number must be at most 15 characters" }),
-    address: z.string().optional(),
+    password: z.string({ message: "Password is required" }).min(6, { message: "Password must be at least 6 characters" }).max(50, { message: "Password must be at most 50 characters" }),
+    contactNumber: z.string({ message: "Contact number is required" })
+        .min(10, { message: "Contact number must be at least 10 characters" })
+        .max(20, { message: "Contact number must be at most 20 characters" }),
+    phoneNumber: z.string().optional(),
+    address: z.string().optional().nullable(),
+    confirmPassword: z.string().optional(),
+    role: z.string().optional(),
 }));
 
 const loginUserZodSchema = z.object({
