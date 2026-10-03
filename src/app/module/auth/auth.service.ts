@@ -15,20 +15,80 @@ import { jwtUtils } from "../../utils/jwt";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
     const { name, email, password } = payload;
+    const cleanEmail = email.toLowerCase().trim();
+
+    const existingUser = await prisma.user.findUnique({
+        where: { email: cleanEmail },
+    });
+
+    if (existingUser) {
+        if (existingUser.emailVerified) {
+            throw new AppError(status.CONFLICT, "This email is already registered and verified. Please log in.");
+        }
+
+        // If the user already registered but hasn't verified their email, resend OTP
+        await auth.api.sendVerificationOTP({
+            body: {
+                email: existingUser.email,
+                type: "email-verification",
+            },
+        });
+
+        logger.info(`Resent verification OTP for existing unverified user: ${existingUser.email}`);
+
+        let patient = await prisma.patient.findFirst({
+            where: { userId: existingUser.id },
+        });
+
+        if (!patient) {
+            patient = await prisma.patient.create({
+                data: {
+                    userId: existingUser.id,
+                    name: payload.name,
+                    email: existingUser.email,
+                    contactNumber: payload.contactNumber,
+                    address: payload.address || null,
+                },
+            });
+        }
+
+        const accessToken = tokenUtils.getAccessToken({
+            userId: existingUser.id,
+            role: existingUser.role,
+            name: existingUser.name,
+            email: existingUser.email,
+            status: existingUser.status,
+            isDeleted: existingUser.isDeleted,
+            emailVerified: false,
+        });
+
+        const refreshToken = tokenUtils.getRefreshToken({
+            userId: existingUser.id,
+            role: existingUser.role,
+            name: existingUser.name,
+            email: existingUser.email,
+            status: existingUser.status,
+            isDeleted: existingUser.isDeleted,
+            emailVerified: false,
+        });
+
+        return {
+            user: existingUser,
+            patient,
+            accessToken,
+            refreshToken,
+        };
+    }
 
     const data = await auth.api.signUpEmail({
         body: {
             name,
-            email,
+            email: cleanEmail,
             password,
-            //default values
-            // needsPasswordChange: false,
-            // role: Role.PATIENT
         }
-    })
+    });
 
     if (!data.user) {
-        // throw new Error("Failed to register patient");
         throw new AppError(status.BAD_REQUEST, "Failed to register patient");
     }
 

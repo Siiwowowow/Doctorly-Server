@@ -167,12 +167,20 @@ const renderEmailHtml = async (templateName: string, templateData: Record<string
     throw new Error(`Email template '${templateName}' not found`);
 };
 
+const getFromAddress = () => {
+    const rawFrom = (envVars.EMAIL_SENDER.SMTP_FROM || envVars.EMAIL_SENDER.SMTP_USER || "").trim();
+    if (rawFrom.includes("<") && rawFrom.includes(">")) {
+        return rawFrom;
+    }
+    return `"Doctorly Healthcare" <${rawFrom}>`;
+};
+
 export const sendEmail = async ({ subject, templateData, templateName, to, attachments }: SendEmailOptions) => {
     try {
         const html = await renderEmailHtml(templateName, templateData);
 
         const info = await transporter.sendMail({
-            from: envVars.EMAIL_SENDER.SMTP_FROM,
+            from: getFromAddress(),
             to: to,
             subject: subject,
             html: html,
