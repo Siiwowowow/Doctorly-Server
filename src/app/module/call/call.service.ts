@@ -741,33 +741,115 @@ const verifyCallParticipant = async (callId: string, userId: string) => {
     return call;
 };
 
-const getIceServers = (user: IRequestUser) => {
-    const host = process.env.WEBRTC_TURN_HOST || "staticauth.openrelay.metered.ca";
-    const sharedSecret = process.env.WEBRTC_TURN_SHARED_SECRET || "openrelayprojectsecret";
-    const expiresAt = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
-    const username = `${expiresAt}:doctorly-${user.userId.slice(0, 12)}`;
-    const credential = createHmac("sha1", sharedSecret).update(username).digest("base64");
+const getIceServers = async (user: IRequestUser) => {
+    const envTurnHost = process.env.WEBRTC_TURN_HOST;
+    const envTurnUser = process.env.WEBRTC_TURN_USERNAME;
+    const envTurnCred = process.env.WEBRTC_TURN_CREDENTIAL;
+    const envSharedSecret = process.env.WEBRTC_TURN_SHARED_SECRET;
+    const meteredApiKey = process.env.METERED_API_KEY;
+    const meteredDomain = process.env.METERED_DOMAIN;
 
+    // 1. Dynamic Metered API TURN credentials (if configured on Render/environment)
+    if (meteredApiKey && meteredDomain) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3500);
+            const res = await fetch(`https://${meteredDomain}.metered.ca/api/v1/turn/credentials?apiKey=${meteredApiKey}`, {
+                signal: controller.signal,
+            });
+            clearTimeout(timeout);
+            if (res.ok) {
+                const meteredIceServers = await res.json();
+                if (Array.isArray(meteredIceServers) && meteredIceServers.length > 0) {
+                    return {
+                        expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+                        iceServers: meteredIceServers,
+                    };
+                }
+            }
+        } catch (meteredErr: unknown) {
+            const msg = meteredErr instanceof Error ? meteredErr.message : String(meteredErr);
+            console.warn("[WEBRTC][TURN] Dynamic Metered fetch failed, using OpenRelay fallback:", msg);
+        }
+    }
+
+    // 2. Custom TURN Host if provided and not the deprecated staticauth host
+    if (envTurnHost && envTurnHost !== "staticauth.openrelay.metered.ca") {
+        if (envTurnUser && envTurnCred) {
+            return {
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                iceServers: [
+                    {
+                        urls: [
+                            "stun:stun.l.google.com:19302",
+                            "stun:stun1.l.google.com:19302",
+                            `stun:${envTurnHost}:80`,
+                        ],
+                    },
+                    {
+                        urls: [
+                            `turn:${envTurnHost}:80?transport=udp`,
+                            `turn:${envTurnHost}:80?transport=tcp`,
+                            `turn:${envTurnHost}:443?transport=udp`,
+                            `turn:${envTurnHost}:443?transport=tcp`,
+                            `turns:${envTurnHost}:443?transport=tcp`,
+                        ],
+                        username: envTurnUser,
+                        credential: envTurnCred,
+                    },
+                ],
+            };
+        } else if (envSharedSecret) {
+            const expiresAt = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
+            const username = `${expiresAt}:doctorly-${user.userId.slice(0, 12)}`;
+            const credential = createHmac("sha1", envSharedSecret).update(username).digest("base64");
+            return {
+                expiresAt: new Date(expiresAt * 1000).toISOString(),
+                iceServers: [
+                    {
+                        urls: [
+                            "stun:stun.l.google.com:19302",
+                            "stun:stun1.l.google.com:19302",
+                            `stun:${envTurnHost}:80`,
+                        ],
+                    },
+                    {
+                        urls: [
+                            `turn:${envTurnHost}:80?transport=udp`,
+                            `turn:${envTurnHost}:80?transport=tcp`,
+                            `turn:${envTurnHost}:443?transport=udp`,
+                            `turn:${envTurnHost}:443?transport=tcp`,
+                            `turns:${envTurnHost}:443?transport=tcp`,
+                        ],
+                        username,
+                        credential,
+                    },
+                ],
+            };
+        }
+    }
+
+    // 3. High-Availability Global OpenRelay TURN servers (Verified active on UDP/TCP 80/443 & TLS 443)
     return {
-        expiresAt: new Date(expiresAt * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         iceServers: [
             {
                 urls: [
                     "stun:stun.l.google.com:19302",
                     "stun:stun1.l.google.com:19302",
-                    `stun:${host}:80`,
+                    "stun:openrelay.metered.ca:80",
                 ],
             },
             {
                 urls: [
-                    `turn:${host}:80?transport=udp`,
-                    `turn:${host}:80?transport=tcp`,
-                    `turn:${host}:443?transport=udp`,
-                    `turn:${host}:443?transport=tcp`,
-                    `turns:${host}:443?transport=tcp`,
+                    "turn:openrelay.metered.ca:80",
+                    "turn:openrelay.metered.ca:80?transport=tcp",
+                    "turn:openrelay.metered.ca:443",
+                    "turn:openrelay.metered.ca:443?transport=tcp",
+                    "turns:openrelay.metered.ca:443?transport=tcp",
                 ],
-                username,
-                credential,
+                username: "openrelayproject",
+                credential: "openrelayproject",
             },
         ],
     };

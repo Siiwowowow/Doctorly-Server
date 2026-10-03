@@ -320,8 +320,9 @@ export const registerSocketHandlers = (
             socket.join(callRoom);
             logger.info(`[Socket] User ${user.userId} joined call room ${callRoom}`);
 
-            // Broadcast to other participants in call room that this user has joined and is ready
-            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_USER_JOINED, {
+            // Broadcast to other participants in call room and personal room that this user has joined
+            const otherUserId = call.callerId === user.userId ? call.receiverId : call.callerId;
+            socket.to(callRoom).to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_USER_JOINED, {
                 callId: payload.callId,
                 userId: user.userId,
                 user: {

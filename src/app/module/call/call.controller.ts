@@ -43,7 +43,7 @@ const getCallById = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getIceServers = catchAsync(async (req: Request, res: Response) => {
-    const result = CallService.getIceServers(req.user);
+    const result = await CallService.getIceServers(req.user);
     sendResponse(res, {
         httpStatusCode: status.OK,
         success: true,
