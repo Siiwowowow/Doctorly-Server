@@ -15,6 +15,7 @@ router.post("/refresh-token", AuthController.getNewToken);
 router.post("/change-password", checkAuth(Role.ADMIN, Role.DOCTOR, Role.PATIENT, Role.SUPER_ADMIN), validateRequest(AuthValidation.changePasswordZodSchema), AuthController.changePassword);
 router.post("/logout", checkAuth(Role.ADMIN, Role.DOCTOR, Role.PATIENT, Role.SUPER_ADMIN), AuthController.logoutUser);
 router.post("/verify-email", validateRequest(AuthValidation.verifyEmailZodSchema), AuthController.verifyEmail);
+router.post("/resend-verification-otp", validateRequest(AuthValidation.forgetPasswordZodSchema), AuthController.resendVerificationOtp);
 router.post("/forget-password", validateRequest(AuthValidation.forgetPasswordZodSchema), AuthController.forgetPassword);
 router.post("/reset-password", validateRequest(AuthValidation.resetPasswordZodSchema), AuthController.resetPassword);
 

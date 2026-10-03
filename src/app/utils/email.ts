@@ -9,18 +9,21 @@ import AppError from "../errorHelpers/AppError";
 import { logger } from "./logger";
 
 const smtpPort = Number(envVars.EMAIL_SENDER.SMTP_PORT) || 465;
+const smtpUser = envVars.EMAIL_SENDER.SMTP_USER?.trim();
+// Strip potential quotes or unexpected whitespace from Google app password
+const smtpPass = envVars.EMAIL_SENDER.SMTP_PASS?.replace(/['"]/g, "").trim();
 
 const transporter = nodemailer.createTransport({
-    host: envVars.EMAIL_SENDER.SMTP_HOST,
+    host: envVars.EMAIL_SENDER.SMTP_HOST || "smtp.gmail.com",
     port: smtpPort,
-    secure: smtpPort === 465, // true for 465, false for 587/other ports
+    secure: smtpPort === 465, // true for 465, false for 587
     auth: {
-        user: envVars.EMAIL_SENDER.SMTP_USER,
-        pass: envVars.EMAIL_SENDER.SMTP_PASS
+        user: smtpUser,
+        pass: smtpPass
     },
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     tls: {
         rejectUnauthorized: false
     }
