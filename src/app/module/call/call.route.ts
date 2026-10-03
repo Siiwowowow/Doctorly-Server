@@ -22,6 +22,13 @@ router.get(
     CallController.getMyCallHistory
 );
 
+// Short-lived TURN credentials for cross-network mobile WebRTC media.
+router.get(
+    "/ice-servers",
+    checkAuth(Role.PATIENT, Role.DOCTOR),
+    CallController.getIceServers
+);
+
 // 3. Get single call details
 router.get(
     "/:callId",

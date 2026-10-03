@@ -42,6 +42,16 @@ const getCallById = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+const getIceServers = catchAsync(async (req: Request, res: Response) => {
+    const result = CallService.getIceServers(req.user);
+    sendResponse(res, {
+        httpStatusCode: status.OK,
+        success: true,
+        message: "ICE servers retrieved successfully",
+        data: result,
+    });
+});
+
 const acceptCall = catchAsync(async (req: Request, res: Response) => {
     const user = req.user;
     const callId = String(req.params.callId);
@@ -98,6 +108,7 @@ export const CallController = {
     initiateCall,
     getMyCallHistory,
     getCallById,
+    getIceServers,
     acceptCall,
     rejectCall,
     cancelCall,

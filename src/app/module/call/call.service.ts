@@ -1,4 +1,5 @@
 import status from "http-status";
+import { createHmac } from "node:crypto";
 import { Prisma } from "../../../generated/prisma/client";
 import {
     AppointmentStatus,
@@ -740,6 +741,38 @@ const verifyCallParticipant = async (callId: string, userId: string) => {
     return call;
 };
 
+const getIceServers = (user: IRequestUser) => {
+    const host = process.env.WEBRTC_TURN_HOST || "staticauth.openrelay.metered.ca";
+    const sharedSecret = process.env.WEBRTC_TURN_SHARED_SECRET || "openrelayprojectsecret";
+    const expiresAt = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
+    const username = `${expiresAt}:doctorly-${user.userId.slice(0, 12)}`;
+    const credential = createHmac("sha1", sharedSecret).update(username).digest("base64");
+
+    return {
+        expiresAt: new Date(expiresAt * 1000).toISOString(),
+        iceServers: [
+            {
+                urls: [
+                    "stun:stun.l.google.com:19302",
+                    "stun:stun1.l.google.com:19302",
+                    `stun:${host}:80`,
+                ],
+            },
+            {
+                urls: [
+                    `turn:${host}:80?transport=udp`,
+                    `turn:${host}:80?transport=tcp`,
+                    `turn:${host}:443?transport=udp`,
+                    `turn:${host}:443?transport=tcp`,
+                    `turns:${host}:443?transport=tcp`,
+                ],
+                username,
+                credential,
+            },
+        ],
+    };
+};
+
 export const CallService = {
     initiateCall,
     acceptCall,
@@ -752,4 +785,5 @@ export const CallService = {
     verifyCallParticipant,
     getPendingIncomingCall,
     clearUserFromCall,
+    getIceServers,
 };
