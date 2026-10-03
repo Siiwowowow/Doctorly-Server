@@ -13,8 +13,10 @@ const bootstrap = async () => {
         // Initialize Socket.IO realtime server
         initSocketIO(httpServer);
 
-        httpServer.listen(envVars.PORT, () => {
-            logger.info(`Server & Socket.IO are running on http://localhost:${envVars.PORT}`);
+        const port = Number(envVars.PORT) || 5000;
+        httpServer.listen(port, "0.0.0.0", () => {
+            logger.info(`Server & Socket.IO are running on http://0.0.0.0:${port}`);
+            console.log(`Local: http://localhost:${port}`);
         });
 
         // Run seedSuperAdmin and warm connection pool non-blockingly so server start is instant
