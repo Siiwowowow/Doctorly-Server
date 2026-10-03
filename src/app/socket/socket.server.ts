@@ -29,13 +29,21 @@ export const initSocketIO = (
     const allowedOrigins = [
         envVars.FRONTEND_URL,
         envVars.BETTER_AUTH_URL,
+        "https://doctorly-fontend.vercel.app",
+        "https://doctorly-frontend.vercel.app",
         "http://localhost:3000",
         "http://localhost:5000",
-    ].filter(Boolean);
+    ].filter(Boolean).map((origin) => origin.replace(/\/+$/, ""));
 
     io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(httpServer, {
         cors: {
-            origin: allowedOrigins,
+            origin: (origin, callback) => {
+                if (!origin) return callback(null, true);
+                const normalizedOrigin = origin.replace(/\/+$/, "");
+                const isAllowed = allowedOrigins.includes(normalizedOrigin)
+                    || /^https:\/\/doctorly-fontend-[a-z0-9-]+\.vercel\.app$/i.test(normalizedOrigin);
+                callback(isAllowed ? null : new Error("Origin not allowed"), isAllowed);
+            },
             credentials: true,
             methods: ["GET", "POST"],
         },

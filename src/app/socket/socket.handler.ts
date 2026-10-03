@@ -70,6 +70,25 @@ export const registerSocketHandlers = (
         io.emit(SOCKET_EVENTS.PRESENCE_ONLINE, presencePayload);
     }
 
+    // Recover an incoming call that was created while the browser socket was
+    // reconnecting or while a Render instance was waking up.
+    CallService.getPendingIncomingCall(user.userId)
+        .then((pendingCall) => {
+            if (!pendingCall || !socket.connected) return;
+            socket.emit(SOCKET_EVENTS.CALL_INCOMING, {
+                callId: pendingCall.id,
+                callerId: pendingCall.callerId,
+                caller: pendingCall.caller,
+                appointmentId: pendingCall.appointmentId,
+                type: pendingCall.type,
+                createdAt: pendingCall.createdAt.toISOString(),
+            });
+        })
+        .catch((error: unknown) => {
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            logger.error(`[Socket] Failed to restore pending call for ${user.userId}: ${msg}`);
+        });
+
     // 3. Presence Query Handler
     socket.on(SOCKET_EVENTS.PRESENCE_GET, (payload, callback) => {
         try {
@@ -470,7 +489,9 @@ export const registerSocketHandlers = (
             };
 
             logger.info(`[CALL][SOCKET][RECV] event=call:ready callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
-            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_READY, readyData);
+            // Also target the participant's private room. Socket.IO de-duplicates
+            // sockets that are in both rooms and this prevents join-order races.
+            socket.to(callRoom).to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_READY, readyData);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
             logger.error(`[CALL][SOCKET] Error handling call:ready: ${msg}`);
@@ -504,7 +525,7 @@ export const registerSocketHandlers = (
             };
 
             logger.info(`[CALL][SOCKET][RECV] event=call:offer (type: ${offer.type}) callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
-            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_OFFER, offerData);
+            socket.to(callRoom).to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_OFFER, offerData);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
             logger.error(`[CALL][SOCKET] Error handling call:offer: ${msg}`);
@@ -538,7 +559,7 @@ export const registerSocketHandlers = (
             };
 
             logger.info(`[CALL][SOCKET][RECV] event=call:answer (type: ${answer.type}) callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
-            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_ANSWER, answerData);
+            socket.to(callRoom).to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_ANSWER, answerData);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
             logger.error(`[CALL][SOCKET] Error handling call:answer: ${msg}`);
@@ -571,7 +592,7 @@ export const registerSocketHandlers = (
             };
 
             logger.info(`[CALL][SOCKET][RECV] event=call:ice-candidate callId=${callId} senderId=${user.userId} receiverId=${otherUserId} socketId=${socket.id}`);
-            socket.to(callRoom).emit(SOCKET_EVENTS.CALL_ICE_CANDIDATE, candidateData);
+            socket.to(callRoom).to(getUserRoom(otherUserId)).emit(SOCKET_EVENTS.CALL_ICE_CANDIDATE, candidateData);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : "Unknown error";
             logger.error(`[CALL][SOCKET] Error handling call:ice-candidate: ${msg}`);

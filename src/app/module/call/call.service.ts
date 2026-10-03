@@ -571,6 +571,43 @@ const handleMissedCallTimeout = async (callId: string) => {
     }
 };
 
+const getPendingIncomingCall = async (receiverId: string) => {
+    const call = await prisma.call.findFirst({
+        where: {
+            receiverId,
+            status: CallStatus.RINGING,
+            isDeleted: false,
+        },
+        orderBy: { createdAt: "desc" },
+        include: defaultCallInclude,
+    });
+
+    if (!call) return null;
+
+    const ageMs = Date.now() - call.createdAt.getTime();
+    const remainingMs = RINGING_TIMEOUT_MS - ageMs;
+    if (remainingMs <= 0) {
+        await handleMissedCallTimeout(call.id);
+        return null;
+    }
+
+    setUserInCall(call.callerId, call.id);
+    setUserInCall(call.receiverId, call.id);
+
+    // Recreate the timeout after a server restart, but never duplicate it.
+    if (!callMissedTimers.has(call.id)) {
+        const timer = setTimeout(() => {
+            handleMissedCallTimeout(call.id).catch((error: unknown) => {
+                const msg = error instanceof Error ? error.message : "Unknown error";
+                logger.error(`[CallService] Failed to expire resumed call ${call.id}: ${msg}`);
+            });
+        }, remainingMs);
+        callMissedTimers.set(call.id, timer);
+    }
+
+    return call;
+};
+
 const getMyCallHistory = async (user: IRequestUser, query: ICallFilterQuery) => {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 20;
@@ -713,5 +750,6 @@ export const CallService = {
     getMyCallHistory,
     getCallById,
     verifyCallParticipant,
+    getPendingIncomingCall,
     clearUserFromCall,
 };
