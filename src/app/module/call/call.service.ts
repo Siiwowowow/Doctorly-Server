@@ -746,15 +746,16 @@ const getIceServers = async (user: IRequestUser) => {
     const envTurnUser = process.env.WEBRTC_TURN_USERNAME;
     const envTurnCred = process.env.WEBRTC_TURN_CREDENTIAL;
     const envSharedSecret = process.env.WEBRTC_TURN_SHARED_SECRET;
-    const meteredApiKey = process.env.METERED_API_KEY;
-    const meteredDomain = process.env.METERED_DOMAIN;
+    const meteredApiKey = process.env.METERED_API_KEY || "7e63da8fb027b43de4d0815825254a80dde1";
+    const meteredDomain = process.env.METERED_DOMAIN || "doctorly.metered.live";
 
-    // 1. Dynamic Metered API TURN credentials (if configured on Render/environment)
+    // 1. Dynamic Metered API TURN credentials
     if (meteredApiKey && meteredDomain) {
         try {
+            const domainHost = meteredDomain.includes(".") ? meteredDomain : `${meteredDomain}.metered.live`;
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 3500);
-            const res = await fetch(`https://${meteredDomain}.metered.ca/api/v1/turn/credentials?apiKey=${meteredApiKey}`, {
+            const timeout = setTimeout(() => controller.abort(), 4000);
+            const res = await fetch(`https://${domainHost}/api/v1/turn/credentials?apiKey=${meteredApiKey}`, {
                 signal: controller.signal,
             });
             clearTimeout(timeout);
@@ -769,7 +770,7 @@ const getIceServers = async (user: IRequestUser) => {
             }
         } catch (meteredErr: unknown) {
             const msg = meteredErr instanceof Error ? meteredErr.message : String(meteredErr);
-            console.warn("[WEBRTC][TURN] Dynamic Metered fetch failed, using OpenRelay fallback:", msg);
+            console.warn("[WEBRTC][TURN] Dynamic Metered fetch failed, using fallback:", msg);
         }
     }
 
@@ -829,7 +830,7 @@ const getIceServers = async (user: IRequestUser) => {
         }
     }
 
-    // 3. High-Availability Global OpenRelay TURN servers (Verified active on UDP/TCP 80/443 & TLS 443)
+    // 3. High-Availability Metered Global TURN Relay fallback (doctorly account)
     return {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         iceServers: [
@@ -837,19 +838,18 @@ const getIceServers = async (user: IRequestUser) => {
                 urls: [
                     "stun:stun.l.google.com:19302",
                     "stun:stun1.l.google.com:19302",
-                    "stun:openrelay.metered.ca:80",
+                    "stun:stun.relay.metered.ca:80",
                 ],
             },
             {
                 urls: [
-                    "turn:openrelay.metered.ca:80",
-                    "turn:openrelay.metered.ca:80?transport=tcp",
-                    "turn:openrelay.metered.ca:443",
-                    "turn:openrelay.metered.ca:443?transport=tcp",
-                    "turns:openrelay.metered.ca:443?transport=tcp",
+                    "turn:global.relay.metered.ca:80",
+                    "turn:global.relay.metered.ca:80?transport=tcp",
+                    "turn:global.relay.metered.ca:443",
+                    "turns:global.relay.metered.ca:443?transport=tcp",
                 ],
-                username: "openrelayproject",
-                credential: "openrelayproject",
+                username: "acb1a39f68319df913415b35",
+                credential: "fau3ppTnse3ATxoh",
             },
         ],
     };
