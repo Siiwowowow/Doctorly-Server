@@ -92,7 +92,7 @@ export const auth = betterAuth({
                                 otp,
                                 type: "email-verification",
                                 actionText: "Verify Your Email",
-                                expiryMinutes: 2,
+                                expiryMinutes: 10,
                             }
                         });
                     } else if (type === "forget-password") {
@@ -105,7 +105,7 @@ export const auth = betterAuth({
                                 otp,
                                 type: "forget-password",
                                 actionText: "Reset Your Password",
-                                expiryMinutes: 2,
+                                expiryMinutes: 10,
                             }
                         });
                     }
@@ -115,7 +115,7 @@ export const auth = betterAuth({
                     throw error;
                 }
             },
-            expiresIn: 2 * 60, // 2 minutes in seconds
+            expiresIn: 10 * 60, // 10 minutes in seconds
             otpLength: 6,
         })
     ],
