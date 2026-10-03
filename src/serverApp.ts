@@ -92,12 +92,13 @@ app.get("/favicon.ico", (req: Request, res: Response) => {
     res.status(204).end();
 });
 
-// Basic route
-app.get(['/', '/api'], async (req: Request, res: Response) => {
+// Basic route & Health check for keep-alive / UptimeRobot
+app.get(['/', '/api', '/health'], async (req: Request, res: Response) => {
     res.status(200).json({
         success: true,
         message: 'Doctorly Healthcare API is live and working',
-    })
+        timestamp: new Date().toISOString()
+    });
 });
 
 app.use(globalErrorHandler)
