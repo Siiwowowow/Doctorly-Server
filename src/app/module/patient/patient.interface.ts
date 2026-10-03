@@ -24,6 +24,9 @@ export interface IUpdatePatientPayload {
     profilePhoto?: string;
     contactNumber?: string;
     address?: string;
+    emergencyContactName?: string;
+    emergencyContactNumber?: string;
+    emergencyContactRelationship?: string;
     bloodGroup?: BloodGroup | string;
     patientHealthData?: IUpdatePatientHealthDataPayload;
 }

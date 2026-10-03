@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "build": "prisma generate && tsup src/serverApp.ts --format esm --out-dir api --entry.index=src/serverApp.ts && tsup src/server.ts --format esm --out-dir dist --entry.server=src/server.ts",
+    "migrate:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
     "dev": "tsx watch src/server.ts",
     "lint": "eslint ./src/**/*",

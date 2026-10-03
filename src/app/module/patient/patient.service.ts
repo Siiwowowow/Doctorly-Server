@@ -36,10 +36,22 @@ const normalizeBloodGroup = (bg?: string | BloodGroup | null): BloodGroup | unde
 
 const formatPatientResponse = (patient: any) => {
     if (!patient) return patient;
+    const dateOfBirth = patient.patientHealthData?.dateOfBirth;
+    let age: number | null = null;
+    if (dateOfBirth) {
+        const birthDate = new Date(dateOfBirth);
+        const today = new Date();
+        age = today.getFullYear() - birthDate.getFullYear();
+        const birthdayPending = today.getMonth() < birthDate.getMonth()
+            || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate());
+        if (birthdayPending) age -= 1;
+    }
     return {
         ...patient,
         bloodGroup: patient.patientHealthData?.bloodGroup || patient.bloodGroup || null,
         gender: patient.patientHealthData?.gender || null,
+        dateOfBirth: dateOfBirth || null,
+        age,
     };
 };
 

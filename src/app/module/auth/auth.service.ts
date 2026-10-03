@@ -1,6 +1,6 @@
 import status from "http-status";
 import { JwtPayload } from "jsonwebtoken";
-import { UserStatus } from "../../../generated/prisma/enums";
+import { BloodGroup, Gender, UserStatus } from "../../../generated/prisma/enums";
 import { envVars } from "../../config/env";
 import AppError from "../../errorHelpers/AppError";
 import { IRequestUser } from "../../interfaces/requestUser.interface";
@@ -47,7 +47,47 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
                     name: payload.name,
                     email: existingUser.email,
                     contactNumber: payload.contactNumber,
-                    address: payload.address || null,
+                    address: payload.address,
+                    emergencyContactName: payload.emergencyContactName,
+                    emergencyContactNumber: payload.emergencyContactNumber,
+                    emergencyContactRelationship: payload.emergencyContactRelationship,
+                    patientHealthData: {
+                        create: {
+                            dateOfBirth: new Date(`${payload.dateOfBirth}T00:00:00.000Z`),
+                            gender: payload.gender as Gender,
+                            bloodGroup: payload.bloodGroup as BloodGroup,
+                            height: "",
+                            weight: "",
+                        },
+                    },
+                },
+            });
+        } else {
+            patient = await prisma.patient.update({
+                where: { id: patient.id },
+                data: {
+                    name: payload.name,
+                    contactNumber: payload.contactNumber,
+                    address: payload.address,
+                    emergencyContactName: payload.emergencyContactName,
+                    emergencyContactNumber: payload.emergencyContactNumber,
+                    emergencyContactRelationship: payload.emergencyContactRelationship,
+                    patientHealthData: {
+                        upsert: {
+                            create: {
+                                dateOfBirth: new Date(`${payload.dateOfBirth}T00:00:00.000Z`),
+                                gender: payload.gender as Gender,
+                                bloodGroup: payload.bloodGroup as BloodGroup,
+                                height: "",
+                                weight: "",
+                            },
+                            update: {
+                                dateOfBirth: new Date(`${payload.dateOfBirth}T00:00:00.000Z`),
+                                gender: payload.gender as Gender,
+                                bloodGroup: payload.bloodGroup as BloodGroup,
+                            },
+                        },
+                    },
                 },
             });
         }
@@ -102,7 +142,19 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
                     name: payload.name,
                     email: payload.email,
                     contactNumber: payload.contactNumber,
-                    address: payload.address || null,
+                    address: payload.address,
+                    emergencyContactName: payload.emergencyContactName,
+                    emergencyContactNumber: payload.emergencyContactNumber,
+                    emergencyContactRelationship: payload.emergencyContactRelationship,
+                    patientHealthData: {
+                        create: {
+                            dateOfBirth: new Date(`${payload.dateOfBirth}T00:00:00.000Z`),
+                            gender: payload.gender as Gender,
+                            bloodGroup: payload.bloodGroup as BloodGroup,
+                            height: "",
+                            weight: "",
+                        },
+                    },
                 }
             })
 

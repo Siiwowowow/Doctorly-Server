@@ -25,6 +25,9 @@ export const updatePatientZodSchema = z.object({
     profilePhoto: z.string().url("Profile photo must be a valid URL").optional(),
     contactNumber: z.string().min(11, "Contact number must be at least 11 characters").max(15, "Contact number must be at most 15 characters").optional(),
     address: z.string().min(5, "Address must be at least 5 characters").max(100, "Address must be at most 100 characters").optional(),
+    emergencyContactName: z.string().min(2).max(80).optional(),
+    emergencyContactNumber: z.string().min(10).max(20).optional(),
+    emergencyContactRelationship: z.string().min(2).max(50).optional(),
     bloodGroup: z.string().optional(),
     patientHealthData: updatePatientHealthDataZodSchema.optional(),
 });

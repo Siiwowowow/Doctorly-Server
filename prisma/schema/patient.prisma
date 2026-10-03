@@ -1,15 +1,18 @@
 model Patient {
   id String @id @default(uuid(7))
 
-  name          String
-  email         String    @unique
-  profilePhoto  String?
-  contactNumber String?
-  address       String?
-  isDeleted     Boolean   @default(false)
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  name                         String
+  email                        String    @unique
+  profilePhoto                 String?
+  contactNumber                String?
+  address                      String?
+  emergencyContactName         String?
+  emergencyContactNumber       String?
+  emergencyContactRelationship String?
+  isDeleted                    Boolean   @default(false)
+  deletedAt                    DateTime?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
 
   //relations
 

@@ -26,7 +26,20 @@ const registerPatientZodSchema = z.preprocess((val: any) => {
         .min(10, { message: "Contact number must be at least 10 characters" })
         .max(20, { message: "Contact number must be at most 20 characters" }),
     phoneNumber: z.string().optional(),
-    address: z.string().optional().nullable(),
+    address: z.string({ message: "Home address is required" }).trim().min(5, "Home address must be at least 5 characters").max(200, "Home address must be at most 200 characters"),
+    dateOfBirth: z.string({ message: "Date of birth is required" })
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format")
+        .refine((value) => {
+            const date = new Date(`${value}T00:00:00.000Z`);
+            return !Number.isNaN(date.getTime()) && date <= new Date();
+        }, "Date of birth cannot be in the future"),
+    gender: z.enum(["MALE", "FEMALE", "OTHER"], { message: "Gender is required" }),
+    bloodGroup: z.enum(["A_POSITIVE", "A_NEGATIVE", "B_POSITIVE", "B_NEGATIVE", "AB_POSITIVE", "AB_NEGATIVE", "O_POSITIVE", "O_NEGATIVE"], { message: "Blood group is required" }),
+    emergencyContactName: z.string({ message: "Emergency contact name is required" }).trim().min(2).max(80),
+    emergencyContactNumber: z.string({ message: "Emergency contact number is required" })
+        .trim().transform((value) => value.replace(/[\s\-()]/g, ""))
+        .pipe(z.string().min(10, "Emergency contact number must be at least 10 characters").max(20)),
+    emergencyContactRelationship: z.string({ message: "Emergency contact relationship is required" }).trim().min(2).max(50),
     confirmPassword: z.string().optional(),
     role: z.string().optional(),
 }));
