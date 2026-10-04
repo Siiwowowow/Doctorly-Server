@@ -1,5 +1,5 @@
 import status from "http-status";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { Prisma } from "../../../generated/prisma/client";
 import {
     AppointmentStatus,
@@ -36,10 +36,6 @@ const setUserInCall = (userId: string, callId: string): void => {
 
 const clearUserFromCall = (userId: string): void => {
     userActiveCallMap.delete(userId);
-};
-
-const isUserInCall = (userId: string): boolean => {
-    return userActiveCallMap.has(userId);
 };
 
 const clearMissedCallTimer = (callId: string): void => {
@@ -197,15 +193,20 @@ const initiateCall = async (user: IRequestUser, payload: IInitiateCallPayload) =
         throw new AppError(status.BAD_REQUEST, "You cannot call yourself");
     }
 
-    // 3. Check if caller is already in a call
-    if (isUserInCall(user.userId)) {
+    const callType = payload.type || CallType.VIDEO;
+    const callerActiveCallId = userActiveCallMap.get(user.userId);
+    const receiverActiveCallId = userActiveCallMap.get(receiverUserId);
+
+    // Reciprocal calls can race; both users being reserved for the same session is busy.
+    if (callerActiveCallId) {
+        if (callerActiveCallId === receiverActiveCallId) {
+            throw new AppError(status.CONFLICT, "Call is busy");
+        }
         throw new AppError(status.BAD_REQUEST, "You are already in an active call session");
     }
 
-    const callType = payload.type || CallType.VIDEO;
-
     // 4. Check if receiver is busy
-    if (isUserInCall(receiverUserId)) {
+    if (receiverActiveCallId) {
         const busyCall = await prisma.call.create({
             data: {
                 callerId: user.userId,
@@ -229,18 +230,29 @@ const initiateCall = async (user: IRequestUser, payload: IInitiateCallPayload) =
         return busyCall;
     }
 
-    // 5. Create call record with status RINGING
-    const call = await prisma.call.create({
-        data: {
-            callerId: user.userId,
-            receiverId: receiverUserId,
-            appointmentId,
-            type: callType,
-            status: CallStatus.RINGING,
-            startedAt: new Date(),
-        },
-        include: defaultCallInclude,
-    });
+    // Reserve both participants before the database await so reciprocal requests cannot race.
+    const reservationId = `pending:${randomUUID()}`;
+    const call = await (async () => {
+        setUserInCall(user.userId, reservationId);
+        setUserInCall(receiverUserId, reservationId);
+        try {
+            return await prisma.call.create({
+                data: {
+                    callerId: user.userId,
+                    receiverId: receiverUserId,
+                    appointmentId,
+                    type: callType,
+                    status: CallStatus.RINGING,
+                    startedAt: new Date(),
+                },
+                include: defaultCallInclude,
+            });
+        } catch (error) {
+            if (userActiveCallMap.get(user.userId) === reservationId) clearUserFromCall(user.userId);
+            if (userActiveCallMap.get(receiverUserId) === reservationId) clearUserFromCall(receiverUserId);
+            throw error;
+        }
+    })();
 
     // 6. Record active call state
     setUserInCall(user.userId, call.id);
