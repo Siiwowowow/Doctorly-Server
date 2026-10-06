@@ -14,12 +14,14 @@ import { PaymentRoutes } from "../module/payment/payment.route";
 import { PrescriptionRoutes } from "../module/prescription/prescription.route";
 import { scheduleRoutes } from "../module/schedule/schedule.route";
 import { SpecialtyRoutes } from "../module/specialty/specialty.route";
+import { ServiceRoutes } from "../module/service/service.route";
 import { UserRoutes } from "../module/user/user.route";
 
 const router = Router();
 
 router.use("/auth", AuthRoutes);
 router.use("/specialties", SpecialtyRoutes);
+router.use("/services", ServiceRoutes);
 router.use("/users", UserRoutes);
 router.use("/patients", PatientRoutes);
 router.use("/doctors", DoctorRoutes);
@@ -35,4 +37,4 @@ router.use("/chat", ChatRoutes);
 router.use("/calls", CallRoutes);
 router.use("/doctor-applications", DoctorApplicationRoutes);
 
-export const IndexRoutes = router;
+export const IndexRoutes = router;
