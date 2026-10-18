@@ -4,6 +4,7 @@ import { Prisma, Schedule } from "../../../generated/prisma/client";
 import AppError from "../../errorHelpers/AppError";
 import { IQueryParams } from "../../interfaces/query.interface";
 import { prisma } from "../../lib/prisma";
+import { cleanupExpiredAppointments } from "../../utils/appointmentCleanup";
 import { QueryBuilder } from "../../utils/QueryBuilder";
 import { scheduleFilterableFields, scheduleIncludeConfig, scheduleSearchableFields } from "./schedule.constant";
 import { ICreateSchedulePayload, IUpdateSchedulePayload } from "./schedule.interface";
@@ -74,6 +75,7 @@ const createSchedule = async (payload: ICreateSchedulePayload) => {
 };
 
 const getAllSchedules = async (query: IQueryParams) => {
+    await cleanupExpiredAppointments();
     const queryBuilder = new QueryBuilder<Schedule, Prisma.ScheduleWhereInput, Prisma.ScheduleInclude>(
         prisma.schedule,
         query,
@@ -88,6 +90,7 @@ const getAllSchedules = async (query: IQueryParams) => {
         .filter()
         .where({
             isDeleted: false,
+            endDateTime: { gt: new Date() },
         })
         .paginate()
         .dynamicInclude(scheduleIncludeConfig)

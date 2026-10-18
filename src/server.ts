@@ -6,6 +6,7 @@ import { initSocketIO } from "./app/socket";
 import { startKeepAliveJob } from "./app/utils/keepAlive";
 import { logger } from "./app/utils/logger";
 import { seedSuperAdmin } from "./app/utils/seed";
+import { cleanupExpiredAppointments } from "./app/utils/appointmentCleanup";
 
 const bootstrap = async () => {
     try {
@@ -28,6 +29,9 @@ const bootstrap = async () => {
             logger.error("Error during initial super admin seeding:", err);
         });
         warmDatabaseConnection().catch(() => {});
+        cleanupExpiredAppointments().catch((error) => {
+            logger.error("Startup appointment cleanup failed:", error);
+        });
     } catch (error) {
         logger.error("Failed to start server:", error);
     }

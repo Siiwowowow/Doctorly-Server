@@ -12,6 +12,7 @@ import { auth } from "./app/lib/auth";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
 import { notFound } from "./app/middleware/notFound";
 import { AppointmentService } from "./app/module/appointment/appointment.service";
+import { cleanupExpiredAppointments } from "./app/utils/appointmentCleanup";
 import { PaymentController } from "./app/module/payment/payment.controller";
 import { IndexRoutes } from "./app/routes";
 
@@ -128,6 +129,15 @@ app.post("/api/internal/send-email", async (req: Request, res: Response) => {
     } catch (error: any) {
         logger.error("Vercel mail relay error:", error?.message || error);
         res.status(502).json({ success: false, message: "Unable to send email" });
+    }
+});
+
+// Remove expired availability and unpaid bookings every minute; retain paid history.
+cron.schedule("* * * * *", async () => {
+    try {
+        await cleanupExpiredAppointments();
+    } catch (error) {
+        logger.error("Expired appointment cleanup failed:", error);
     }
 });
 

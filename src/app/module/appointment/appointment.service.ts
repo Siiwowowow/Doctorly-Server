@@ -6,6 +6,7 @@ import AppError from "../../errorHelpers/AppError";
 import { IQueryParams } from "../../interfaces/query.interface";
 import { IRequestUser } from "../../interfaces/requestUser.interface";
 import { prisma } from "../../lib/prisma";
+import { cleanupExpiredAppointments } from "../../utils/appointmentCleanup";
 import { QueryBuilder } from "../../utils/QueryBuilder";
 import { NotificationService } from "../notification/notification.service";
 import { emitToUser } from "../../socket/socket.server";
@@ -222,6 +223,7 @@ const createAppointment = async (payload: IBookAppointmentPayload, user: IReques
 };
 
 const getMyAppointments = async (user: IRequestUser, query: IQueryParams) => {
+    await cleanupExpiredAppointments();
     let whereFilter: Prisma.AppointmentWhereInput = {};
 
     if (user.role === Role.PATIENT) {
@@ -304,6 +306,7 @@ const getMyAppointments = async (user: IRequestUser, query: IQueryParams) => {
 };
 
 const getAppointmentById = async (id: string, user: IRequestUser) => {
+    await cleanupExpiredAppointments();
     const includeConfig = {
         doctor: {
             select: {
@@ -661,6 +664,7 @@ const cancelAppointment = async (id: string, user: IRequestUser) => {
 };
 
 const getAllAppointments = async (query: IQueryParams) => {
+    await cleanupExpiredAppointments();
     const queryBuilder = new QueryBuilder<Appointment, Prisma.AppointmentWhereInput, Prisma.AppointmentInclude>(
         prisma.appointment,
         query,

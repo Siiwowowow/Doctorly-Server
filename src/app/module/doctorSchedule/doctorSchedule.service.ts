@@ -5,6 +5,7 @@ import AppError from "../../errorHelpers/AppError";
 import { IQueryParams } from "../../interfaces/query.interface";
 import { IRequestUser } from "../../interfaces/requestUser.interface";
 import { prisma } from "../../lib/prisma";
+import { cleanupExpiredAppointments } from "../../utils/appointmentCleanup";
 import { QueryBuilder } from "../../utils/QueryBuilder";
 import {
     doctorScheduleFilterableFields,
@@ -75,6 +76,9 @@ const createDoctorSchedule = async (user: IRequestUser, payload: ICreateDoctorSc
     // 2. Validate internal time consistency & overlap within incoming schedules
     for (let i = 0; i < newSchedules.length; i++) {
         const s1 = newSchedules[i];
+        if (s1.endDateTime <= new Date()) {
+            throw new AppError(status.BAD_REQUEST, "Expired schedules cannot be assigned. Create a new schedule");
+        }
         if (s1.startDateTime >= s1.endDateTime) {
             throw new AppError(status.BAD_REQUEST, "Schedule start time must be before end time");
         }
@@ -159,6 +163,7 @@ const createDoctorSchedule = async (user: IRequestUser, payload: ICreateDoctorSc
 };
 
 const getMyDoctorSchedules = async (user: IRequestUser, query: IQueryParams) => {
+    await cleanupExpiredAppointments();
     const doctor = await prisma.doctor.findFirst({
         where: {
             userId: user.userId,
@@ -197,6 +202,7 @@ const getMyDoctorSchedules = async (user: IRequestUser, query: IQueryParams) => 
 };
 
 const getDoctorSchedulesByDoctorId = async (doctorId: string, query: IQueryParams) => {
+    await cleanupExpiredAppointments();
     const doctor = await prisma.doctor.findFirst({
         where: {
             id: doctorId,
@@ -235,6 +241,7 @@ const getDoctorSchedulesByDoctorId = async (doctorId: string, query: IQueryParam
 };
 
 const getAllDoctorSchedules = async (query: IQueryParams) => {
+    await cleanupExpiredAppointments();
     const queryBuilder = new QueryBuilder<DoctorSchedules, Prisma.DoctorSchedulesWhereInput, Prisma.DoctorSchedulesInclude>(
         prisma.doctorSchedules,
         query,
@@ -375,6 +382,9 @@ const updateDoctorSchedule = async (user: IRequestUser, payload: IUpdateDoctorSc
         });
 
         for (const newSched of newSchedules) {
+            if (newSched.endDateTime <= new Date()) {
+                throw new AppError(status.BAD_REQUEST, "Expired schedules cannot be assigned. Create a new schedule");
+            }
             for (const existSched of remainingExistingSchedules) {
                 if (
                     existSched.schedule.startDateTime < newSched.endDateTime &&
