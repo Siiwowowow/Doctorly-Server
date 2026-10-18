@@ -4,11 +4,5 @@
     "api/index.js": {
       "includeFiles": "src/app/templates/**"
     }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api"
-    }
-  ]
+  }
 }
