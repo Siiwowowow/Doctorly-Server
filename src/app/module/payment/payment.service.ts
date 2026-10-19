@@ -2,7 +2,7 @@
 import status from "http-status";
 import Stripe from "stripe";
 import { v4 as uuidv4 } from "uuid";
-import { Payment, Prisma } from "../../../generated/prisma/client";
+import { Payment, Prisma, PrismaClient } from "../../../generated/prisma/client";
 import { AppointmentStatus, NotificationType, PaymentStatus, Role } from "../../../generated/prisma/enums";
 import { envVars } from "../../config/env";
 import { stripe } from "../../config/stripe.config";
@@ -517,8 +517,12 @@ const verifyPaymentSession = async (sessionId: string, user: IRequestUser) => {
     };
 };
 
-const getPaymentInvoice = async (paymentIdOrAppointmentId: string, user: IRequestUser) => {
-    const payment = await prisma.payment.findFirst({
+const getPaymentInvoice = async (
+    paymentIdOrAppointmentId: string,
+    user: IRequestUser,
+    db: Pick<PrismaClient, "payment" | "patient" | "doctor"> = prisma,
+) => {
+    const payment = await db.payment.findFirst({
         where: {
             OR: [
                 { id: paymentIdOrAppointmentId },
@@ -543,38 +547,46 @@ const getPaymentInvoice = async (paymentIdOrAppointmentId: string, user: IReques
     const appointment = payment.appointment;
 
     if (user.role === Role.PATIENT) {
-        const patient = await prisma.patient.findFirst({
+        const patient = await db.patient.findFirst({
             where: { userId: user.userId, isDeleted: false },
         });
         if (!patient || appointment.patientId !== patient.id) {
             throw new AppError(status.FORBIDDEN, "Unauthorized access to this invoice");
         }
     } else if (user.role === Role.DOCTOR) {
-        const doctor = await prisma.doctor.findFirst({
+        const doctor = await db.doctor.findFirst({
             where: { userId: user.userId, isDeleted: false },
         });
         if (!doctor || appointment.doctorId !== doctor.id) {
             throw new AppError(status.FORBIDDEN, "Unauthorized access to this invoice");
         }
+    } else if (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) {
+        throw new AppError(status.FORBIDDEN, "Unauthorized access to this invoice");
     }
 
-    if (payment.status !== PaymentStatus.PAID && appointment.paymentStatus !== PaymentStatus.PAID) {
+    if (payment.status !== PaymentStatus.PAID) {
         throw new AppError(status.BAD_REQUEST, "Invoice is only available for paid appointments");
     }
 
-    const invoiceNumber = `DOC-INV-${payment.id.slice(0, 8).toUpperCase()}`;
+    // UUIDv7 IDs share a timestamp prefix. The full ID keeps invoice numbers unique.
+    const invoiceNumber = `DOC-INV-${payment.id.toUpperCase()}`;
     const invoiceDate = payment.updatedAt || payment.createdAt;
     const formattedDate = new Date(invoiceDate).toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
         day: "numeric",
+        timeZone: "Asia/Dhaka",
     });
     const appointmentSchedule = appointment.schedule?.startDateTime
         ? new Date(appointment.schedule.startDateTime).toLocaleString("en-US", {
               dateStyle: "full",
               timeStyle: "short",
-          })
+              timeZone: "Asia/Dhaka",
+          }) + " (Bangladesh time)"
         : "N/A";
+    const gatewayData = payment.paymentGatewayData as Prisma.JsonObject | null;
+    const currency = typeof gatewayData?.currency === "string" && /^[a-zA-Z]{3}$/.test(gatewayData.currency)
+        ? gatewayData.currency.toUpperCase() : "BDT";
 
     return {
         invoiceNumber,
@@ -583,7 +595,7 @@ const getPaymentInvoice = async (paymentIdOrAppointmentId: string, user: IReques
         appointmentId: appointment.id,
         paymentStatus: payment.status,
         amount: payment.amount,
-        currency: "BDT",
+        currency,
         paymentDate: formattedDate,
         patient: {
             id: appointment.patient.id,
