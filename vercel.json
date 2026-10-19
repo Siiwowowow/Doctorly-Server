@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/index.js": {
-      "includeFiles": "src/app/templates/**"
+      "includeFiles": "{src/app/templates/**,node_modules/pdfkit/js/standard-fonts/**,node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/standard-fonts/**}"
     }
   }
 }
